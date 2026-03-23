@@ -1,0 +1,227 @@
+/* 🎨 Reset e base */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --azul-escuro: #003366;
+  --azul-claro: #0077b6;
+  --dourado: #f2b632;
+  --cinza-claro: #f7f9fb;
+  --cinza-borda: #dce3e8;
+  --branco: #ffffff;
+  --texto: #333333;
+  --sombra: rgba(0, 0, 0, 0.1);
+}
+
+/* Corpo */
+body {
+  font-family: "Poppins", Arial, sans-serif;
+  background: linear-gradient(135deg, var(--azul-escuro) 40%, var(--azul-claro) 100%);
+  color: var(--texto);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* Cabeçalho */
+.main-header {
+  background-color: var(--azul-escuro);
+  color: var(--branco);
+  padding: 20px 0;
+  box-shadow: 0 2px 6px var(--sombra);
+}
+
+.header-container {
+  width: 90%;
+  max-width: 1200px;
+  margin: auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.logo {
+  font-size: 1.9rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.nav-links {
+  list-style: none;
+  display: flex;
+  gap: 25px;
+}
+
+.nav-links li a {
+  color: var(--branco);
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.3s, transform 0.2s;
+}
+
+.nav-links li a:hover {
+  color: var(--dourado);
+  transform: scale(1.05);
+}
+
+/* Container principal (login, registro, redefinir senha) */
+.login-container {
+  flex: 1;
+  max-width: 450px;
+  width: 90%;
+  margin: 80px auto;
+  padding: 45px 40px;
+  background-color: var(--branco);
+  border-radius: 16px;
+  box-shadow: 0 6px 20px var(--sombra);
+  animation: fadeIn 0.8s ease-in-out;
+}
+
+.login-container h1 {
+  text-align: center;
+  margin-bottom: 30px;
+  color: var(--azul-escuro);
+  font-weight: 700;
+  font-size: 1.8rem;
+}
+
+/* Formulários */
+.login-form,
+form {
+  display: flex;
+  flex-direction: column;
+}
+
+.login-form label,
+form label {
+  margin-bottom: 6px;
+  font-weight: 600;
+  color: var(--azul-escuro);
+}
+
+.login-form input,
+form input {
+  padding: 12px;
+  margin-bottom: 20px;
+  border-radius: 8px;
+  border: 1px solid var(--cinza-borda);
+  font-size: 1rem;
+  background-color: var(--cinza-claro);
+  transition: all 0.3s ease;
+}
+
+.login-form input:focus,
+form input:focus {
+  border-color: var(--azul-claro);
+  box-shadow: 0 0 6px rgba(0, 119, 182, 0.3);
+  outline: none;
+}
+
+/* Botão */
+.login-form button,
+form button {
+  padding: 12px;
+  background: linear-gradient(135deg, var(--azul-claro), var(--azul-escuro));
+  color: var(--branco);
+  border: none;
+  border-radius: 8px;
+  font-size: 1.05rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.login-form button:hover,
+form button:hover {
+  background: linear-gradient(135deg, var(--azul-escuro), var(--azul-claro));
+  transform: scale(1.02);
+}
+
+/* Mensagens de erro e sucesso */
+.alert {
+  padding: 12px 15px;
+  border-radius: 6px;
+  margin-bottom: 20px;
+  text-align: center;
+  font-weight: 500;
+  animation: fadeIn 0.4s ease;
+}
+
+.alert-danger {
+  background-color: #ffe6e6;
+  color: #b71c1c;
+  border: 1px solid #f5c2c2;
+}
+
+.alert-success {
+  background-color: #e7f7ec;
+  color: #256029;
+  border: 1px solid #b3e6c2;
+}
+
+/* Links adicionais */
+.form-links,
+.login-container p {
+  text-align: center;
+  margin-top: 18px;
+  font-size: 0.95rem;
+  color: var(--azul-escuro);
+}
+
+.form-links a,
+.login-container p a {
+  color: var(--azul-claro);
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.3s;
+}
+
+.form-links a:hover,
+.login-container p a:hover {
+  color: var(--dourado);
+}
+
+/* Rodapé */
+footer {
+  background-color: var(--azul-escuro);
+  color: var(--branco);
+  text-align: center;
+  padding: 15px 0;
+  margin-top: auto;
+  font-size: 0.95rem;
+}
+
+/* Animação */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-15px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Responsividade */
+@media (max-width: 600px) {
+  .login-container {
+    margin: 50px auto;
+    padding: 30px 20px;
+  }
+
+  .header-container {
+    flex-direction: column;
+    text-align: center;
+    gap: 10px;
+  }
+
+  .nav-links {
+    flex-direction: column;
+    gap: 10px;
+  }
+}

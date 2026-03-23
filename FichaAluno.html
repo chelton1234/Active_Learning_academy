@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Reforço Escolar - Ficha de Inscrição</title>
+  <link rel="stylesheet" href="Css/FichaAluno.css" />
+</head>
+<body>
+  
+  <!-- Header com Language-option e Carrinho lado a lado -->
+  <header class="main-header">
+    <div class="header-content">
+      <!-- Language-option à esquerda -->
+      <div class="language-container">
+        <div class="language-selector" id="languageSelector">
+          <button class="language-btn">
+            <span class="flag-icon" id="currentFlag">🇵🇹</span>
+            <span class="language-code" id="currentLang">PT</span>
+            <span class="dropdown-arrow">▼</span>
+          </button>
+          <div class="language-dropdown">
+            <a href="#" class="language-item active" data-lang="pt">
+              <span class="flag-icon">🇵🇹</span>
+              <span>Português</span>
+            </a>
+            <a href="#" class="language-item" data-lang="en">
+              <span class="flag-icon">🇬🇧</span>
+              <span>English</span>
+            </a>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Carrinho à direita -->
+      <div class="cart-container">
+        <div class="cart-icon">🛒</div>
+        <div class="cart-info">
+          <span class="cart-label" data-pt="Total:" data-en="Total:">Total:</span>
+          <span class="cart-total" id="total">0 MT</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Formulário Principal -->
+  <main class="form-container">
+    <form id="formFicha" action="ficha_processar.php" method="POST">
+      <h1 class="form-title" data-pt="Ficha de Inscrição do Aluno" data-en="Student Registration Form">
+        Ficha de Inscrição do Aluno
+      </h1>
+
+      <div class="form-sections">
+        <!-- Coluna 1: Dados Pessoais -->
+        <section class="form-section personal-data">
+          <h2 data-pt="📋 Dados Pessoais" data-en="📋 Personal Data">
+            📋 Dados Pessoais
+          </h2>
+
+          <div class="form-field">
+            <label for="nome" data-pt="Nome Completo:" data-en="Full Name:">Nome Completo:</label>
+            <input id="nome" name="nome" type="text" required />
+          </div>
+
+          <div class="form-field">
+            <label for="classe" data-pt="Classe / Ano:" data-en="Class / Year:">Classe / Ano:</label>
+            <input id="classe" name="classe" type="text" required />
+          </div>
+
+          <div class="form-field">
+            <label data-pt="Sexo:" data-en="Gender:">Sexo:</label>
+            <div class="radio-group">
+              <label class="radio-option">
+                <input type="radio" id="m" name="sexo" value="m" />
+                <span data-pt="Masculino" data-en="Male">Masculino</span>
+              </label>
+              <label class="radio-option">
+                <input type="radio" id="f" name="sexo" value="f" />
+                <span data-pt="Feminino" data-en="Female">Feminino</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="form-field">
+            <label for="localizacao" data-pt="📍 Localização / Endereço:" data-en="📍 Location / Address:">
+              📍 Localização / Endereço:
+            </label>
+            <textarea id="localizacao" name="localizacao" 
+                      data-placeholder-pt="Ex: Bairro Central, Rua da Escola, Nº 123, Maputo Cidade"
+                      data-placeholder-en="Ex: Central Neighborhood, School Street, No. 123, Maputo City"
+                      rows="3" required></textarea>
+            <small style="display: block; margin-top: 5px; color: #666; font-size: 13px;">
+              <span data-pt="Forneça um endereço detalhado para possível aula ao domicílio" 
+                    data-en="Provide a detailed address for possible home tutoring">
+                Forneça um endereço detalhado para possível aula ao domicílio
+              </span>
+            </small>
+          </div>
+
+          <div class="form-field">
+            <label for="contacto_encarregado" data-pt="Contacto do Encarregado:" data-en="Guardian's Contact:">
+              Contacto do Encarregado:
+            </label>
+            <input id="contacto_encarregado" name="contacto_encarregado" type="tel" 
+                   placeholder="+258 84 123 4567" required />
+          </div>
+
+          <div class="form-field">
+            <label for="escola" data-pt="Escola:" data-en="School:">Escola:</label>
+            <input id="escola" name="escola" type="text" 
+                   placeholder="Nome da escola onde estuda" 
+                   data-placeholder-pt="Nome da escola onde estuda"
+                   data-placeholder-en="School name where you study" required />
+          </div>
+        </section>
+
+        <!-- Coluna 2: Regime & Agendamento -->
+        <section class="form-section schedule">
+          <h2 data-pt="📅 Regime & Agendamento" data-en="📅 Schedule & Planning">
+            📅 Regime & Agendamento
+          </h2>
+
+          <div class="form-field">
+            <label for="nivel" data-pt="Nível de Ensino:" data-en="Education Level:">Nível de Ensino:</label>
+            <select id="nivel" name="nivel" required>
+              <option value="" data-pt="Selecionar" data-en="Select">Selecionar</option>
+              <option value="primary" data-pt="Primary" data-en="Primary">Primary</option>
+              <option value="secondary" data-pt="Lower Secondary" data-en="Lower Secondary">Lower Secondary</option>
+              <option value="cambridge" data-pt="Upper Secondary" data-en="Upper Secondary">Upper Secondary</option>
+            </select>
+          </div>
+
+          <!-- Pacotes -->
+          <div class="form-field">
+            <label data-pt="🎯 Escolha o Pacote:" data-en="🎯 Choose Package:">🎯 Escolha o Pacote:</label>
+            <div class="package-options">
+              <div class="package-option">
+                <input type="radio" name="pacote" id="basico" value="basico" data-dias="2" data-preco="3000" data-finsemana="true" required>
+                <label for="basico">
+                  <strong data-pt="Básico" data-en="Basic">Básico</strong>
+                  <span class="package-details" data-pt="2 dias por semana (pode incluir fins de semana)" data-en="2 days per week (can include weekends)">
+                    2 dias por semana (pode incluir fins de semana)
+                  </span>
+                  <span class="package-price">3000 MZN</span>
+                </label>
+              </div>
+              
+              <div class="package-option">
+                <input type="radio" name="pacote" id="intermedio" value="intermedio" data-dias="3" data-preco="4000" data-finsemana="false" required>
+                <label for="intermedio">
+                  <strong data-pt="Intermediário" data-en="Intermediate">Intermediário</strong>
+                  <span class="package-details" data-pt="3 dias por semana" data-en="3 days per week">
+                    3 dias por semana
+                  </span>
+                  <span class="package-price">4000 MZN</span>
+                </label>
+              </div>
+              
+              <div class="package-option">
+                <input type="radio" name="pacote" id="premium" value="premium" data-dias="4" data-preco="5000" data-finsemana="false" required>
+                <label for="premium">
+                  <strong data-pt="Premium" data-en="Premium">Premium</strong>
+                  <span class="package-details" data-pt="4 dias por semana" data-en="4 days per week">
+                    4 dias por semana
+                  </span>
+                  <span class="package-price">5000 MZN</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Dias da Semana -->
+          <div class="form-field" id="dias-semana-container" style="display: none;">
+            <label data-pt="📅 Selecione os dias da semana:" data-en="📅 Select week days:">
+              📅 Selecione os dias da semana:
+            </label>
+            <div class="days-grid">
+              <div class="day-option">
+                <input type="checkbox" name="dias[]" id="segunda" value="segunda">
+                <label for="segunda" data-pt="Segunda" data-en="Monday">Segunda</label>
+              </div>
+              <div class="day-option">
+                <input type="checkbox" name="dias[]" id="terca" value="terca">
+                <label for="terca" data-pt="Terça" data-en="Tuesday">Terça</label>
+              </div>
+              <div class="day-option">
+                <input type="checkbox" name="dias[]" id="quarta" value="quarta">
+                <label for="quarta" data-pt="Quarta" data-en="Wednesday">Quarta</label>
+              </div>
+              <div class="day-option">
+                <input type="checkbox" name="dias[]" id="quinta" value="quinta">
+                <label for="quinta" data-pt="Quinta" data-en="Thursday">Quinta</label>
+              </div>
+              <div class="day-option">
+                <input type="checkbox" name="dias[]" id="sexta" value="sexta">
+                <label for="sexta" data-pt="Sexta" data-en="Friday">Sexta</label>
+              </div>
+              <div class="day-option weekend-day" style="display: none;">
+                <input type="checkbox" name="dias[]" id="sabado" value="sabado">
+                <label for="sabado" data-pt="Sábado" data-en="Saturday">Sábado</label>
+              </div>
+              <div class="day-option weekend-day" style="display: none;">
+                <input type="checkbox" name="dias[]" id="domingo" value="domingo">
+                <label for="domingo" data-pt="Domingo" data-en="Sunday">Domingo</label>
+              </div>
+            </div>
+            <div class="days-info" id="info-dias"></div>
+          </div>
+
+          <!-- Horários -->
+          <div class="form-field" id="horarios-container" style="display: none;">
+            <label data-pt="⏰ Escolha o horário para todas as aulas:" data-en="⏰ Choose time slot for all classes:">
+              ⏰ Escolha o horário para todas as aulas:
+            </label>
+            <div id="horarios-dias">
+              <!-- Dinâmico - será preenchido pelo JavaScript -->
+            </div>
+          </div>
+
+          <!-- Regime das Aulas -->
+          <div class="form-field">
+            <fieldset class="teaching-mode">
+              <legend data-pt="🏫 Regime das Aulas" data-en="🏫 Class Mode">🏫 Regime das Aulas</legend>
+              <div class="checkbox-group">
+                <label class="checkbox-option">
+                  <input type="checkbox" id="presencial" name="presencial" />
+                  <span data-pt="Presencial" data-en="In-person">Presencial</span>
+                </label>
+                <label class="checkbox-option">
+                  <input type="checkbox" id="online" name="online" />
+                  <span data-pt="Online" data-en="Online">Online</span>
+                </label>
+                <label class="checkbox-option">
+                  <input type="checkbox" id="domicilio" name="domicilio" />
+                  <span data-pt="Ao Domicílio (+1000 MT)" data-en="At Home (+1000 MT)">
+                    Ao Domicílio (+1000 MT)
+                  </span>
+                </label>
+              </div>
+            </fieldset>
+          </div>
+
+          <div class="form-field">
+            <label for="dificuldade" data-pt="📝 Dificuldades / Observações:" data-en="📝 Difficulties / Observations:">
+              📝 Dificuldades / Observações:
+            </label>
+            <textarea id="dificuldade" name="dificuldade" 
+                      data-placeholder-pt="Descreva as suas dificuldades ou observações importantes"
+                      data-placeholder-en="Describe your difficulties or important observations"
+                      rows="4" required></textarea>
+          </div>
+        </section>
+      </div>
+
+      <!-- Campos ocultos para horários -->
+      <input type="hidden" name="horarios_json" id="horarios_json" />
+      <input type="hidden" name="valor_total" id="valor_total" />
+      <input type="hidden" name="pagamento_status" id="pagamento_status" value="pendente" />
+      <input type="hidden" name="recibo_pdf" id="recibo_pdf" value="" />
+      <input type="hidden" name="valor_pago" id="valor_pago" value="" />
+      <input type="hidden" name="data_pagamento" id="data_pagamento" value="" />
+
+      <!-- Botões -->
+      <div class="form-buttons">
+        <button type="button" id="btnPagamento" class="payment-btn" 
+                data-pt="💳 Efetuar Pagamento" data-en="💳 Make Payment">
+          💳 Efetuar Pagamento
+        </button>
+        <button type="submit" id="btnGuardar" class="submit-btn" 
+                data-pt="✅ Guardar Inscrição" data-en="✅ Save Registration">
+          ✅ Guardar Inscrição
+        </button>
+      </div>
+    </form>
+  </main>
+
+  <!-- JavaScript -->
+  <script src="javaScript/Ficha.js"></script>
+</body>
+</html>

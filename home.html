@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Active Learning Academy - Currículo Cambridge</title>
+  <link rel="stylesheet" href="css/home.css"/>
+  <script src="home.js" defer></script>
+</head>
+<body>
+  
+  <!-- HEADER COM MESMA ESTRUTURA DO LOGIN -->
+  <header class="main-header">
+    <div class="container header-container">
+      <!-- 1. LOGO DA EMPRESA -->
+      <div class="logo-container">
+        <a href="Cambradge.html">
+          <img src="img/logo.jpeg" alt="Active Learning Academy Logo" class="site-logo" />
+        </a>
+      </div>
+      
+      <!-- CONTEÚDO DO LADO DIREITO -->
+      <div class="header-right">
+        <!-- 2. SELECTOR DE IDIOMA (SEMPRE VISÍVEL) -->
+        <div class="language-wrapper" id="languageWrapper">
+          <div class="language-selector" id="languageSelector">
+            <button class="language-btn" aria-label="Selecionar idioma">
+              <span class="language-flag">🇵🇹</span>
+              <span class="language-text">PT</span>
+              <span class="language-arrow">▼</span>
+            </button>
+            <div class="language-dropdown">
+              <a href="#" class="language-option" data-lang="pt">
+                <span class="language-flag">🇵🇹</span>
+                <span>Português</span>
+              </a>
+              <a href="#" class="language-option" data-lang="en">
+                <span class="language-flag">🇬🇧</span>
+                <span>English</span>
+              </a>
+            </div>
+          </div>
+        </div>
+        
+        <!-- MENU DESKTOP (APENAS DESKTOP) -->
+        <nav class="desktop-nav">
+          <ul class="nav-links">
+            <li><a href="home.html" class="active">Home</a></li>
+            <li><a href="servicos.php">Serviços</a></li>
+            <li><a href="Login.php">Login</a></li>
+            <li><a href="SobreNos.php">Sobre Nós</a></li>
+            <li><a href="Sign-in.php" class="btn-register">Registro</a></li>
+          </ul>
+        </nav>
+        
+        <!-- 3. MENU HAMBÚRGUER (APENAS MOBILE) -->
+        <button class="hamburger mobile-only" id="hamburger" aria-label="Abrir menu">
+          <img src="img/menu.svg" alt="Menu" class="menu-icon">
+        </button>
+      </div>
+    </div>
+    
+    <!-- MENU MOBILE LATERAL -->
+    <div class="mobile-menu" id="mobileMenu">
+      <div class="menu-header">
+        <div class="menu-logo">
+          <img src="img/logo.jpeg" alt="Active Learning Academy">
+        </div>
+        <button class="close-menu" id="closeMenu" aria-label="Fechar menu">
+          <img src="img/close.svg" alt="Fechar">
+        </button>
+      </div>
+      
+      <nav class="mobile-nav">
+        <ul>
+          <li><a href="Cambradge.html" class="active">Home</a></li>
+          <li><a href="servicos.html">Serviços</a></li>
+          <li><a href="Login.php">Login</a></li>
+          <li><a href="SobreNos.html">Sobre Nós</a></li>
+          <li><a href="Sign-in.php" class="btn-register">Registro</a></li>
+        </ul>
+      </nav>
+    </div>
+    
+    <!-- OVERLAY -->
+    <div class="menu-overlay" id="menuOverlay"></div>
+  </header>
+
+  <!-- Hero -->
+  <section class="hero" id="sobre">
+    <div class="container hero-text">
+      <h1 data-i18n="heroTitle">Impulsionando o Sucesso Académico no Currículo Cambridge</h1>
+      <p data-i18n="heroDesc">Somos a ponte entre os desafios e o sucesso dos estudantes moçambicanos no currículo internacional Cambridge.</p>
+      <a href="servicos.html" class="btn-cta" data-i18n="exploreServices">Explorar Serviços</a>
+    </div>
+  </section>
+
+  <!-- Como Ajudamos -->
+  <section class="ajuda-split">
+    <div class="container ajuda-container">
+      <div class="ajuda-texto">
+        <h2 data-i18n="howHelp">Como Podemos Ajudar</h2>
+        <p data-i18n="helpDesc">
+          Ligamos alunos com explicadores experientes e formados no currículo Cambridge.<br>
+          Os nossos professores oferecem acompanhamento personalizado, adaptado às dificuldades específicas de cada estudante.<br>
+          Seja online, ao domicílio ou em centros de estudo, oferecemos apoio contínuo para garantir progresso real e confiança no processo de aprendizagem.
+        </p>
+      </div>
+      <div class="ajuda-imagem">
+        <img src="img/Testes.jpeg" alt="Educação de qualidade">
+      </div>
+    </div>
+  </section>
+
+  <!-- Dificuldades -->
+  <section id="dificuldades" class="section">
+    <div class="container">
+      <h2 class="section-title" data-i18n="difficultiesTitle">Qual é o problema que o seu filho enfrenta no currículo Cambridge?</h2>
+      <div class="carousel-container">
+        <div class="carousel-track" id="carousel-track">
+          <div class="card"><h3 data-i18n="diff1">Falta de domínio da língua inglesa</h3><img src="img/crianca1.jpg" alt=""><p data-i18n="diff1Desc">Os alunos enfrentam dificuldades por não dominarem o inglês.</p></div>
+          <div class="card"><h3 data-i18n="diff2">Adaptação a metodologias estrangeiras</h3><img src="img/metodologia1.jpg" alt=""><p data-i18n="diff2Desc">O modelo de ensino exige mais autonomia e pensamento crítico.</p></div>
+          <div class="card"><h3 data-i18n="diff3">Acesso limitado a recursos didáticos</h3><img src="img/curriculos.jpg" alt=""><p data-i18n="diff3Desc">Muitos alunos não têm livros, internet ou materiais adequados.</p></div>
+          <div class="card"><h3 data-i18n="diff4">Falta de apoio personalizado</h3><img src="img/Apoio.jpeg" alt=""><p data-i18n="diff4Desc">Nem todos recebem a atenção necessária para superar dificuldades.</p></div>
+          <div class="card"><h3 data-i18n="diff5">Pressão para altos desempenhos</h3><img src="img/Pressao.jpeg" alt=""><p data-i18n="diff5Desc">O currículo Cambridge exige excelência, o que pode causar stress.</p></div>
+          <div class="card"><h3 data-i18n="diff6">Falta de professores especializados</h3><img src="img/Professor.jpeg" alt=""><p data-i18n="diff6Desc">Há escassez de docentes formados para o padrão Cambridge.</p></div>
+          <div class="card"><h3 data-i18n="diff7">Necessidades Educativas Especiais</h3><img src="img/necessidades.jpg" alt=""><p data-i18n="diff7Desc">Estudantes com necessidades especiais não recebem suporte adequado.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Soluções por Nível -->
+  <section class="section solucoes-niveis">
+    <div class="container">
+      <h2 class="section-title" data-i18n="solutionsTitle">Temos Soluções para:</h2>
+      <div class="niveis-grid">
+        <div class="nivel-card">
+          <h3 data-i18n="primary">Primary</h3>
+          <p data-i18n="primaryDesc">Foco no desenvolvimento das competências básicas com reforço em leitura, escrita, matemática e compreensão.</p>
+        </div>
+        <div class="nivel-card">
+          <h3 data-i18n="lowerSecondary">Lower Secondary</h3>
+          <p data-i18n="lowerSecondaryDesc">Consolidação dos conhecimentos fundamentais com suporte em ciências, línguas e raciocínio lógico.</p>
+        </div>
+        <div class="nivel-card">
+          <h3 data-i18n="upperSecondary">Upper Secondary</h3>
+          <p data-i18n="upperSecondaryDesc">Preparação direcionada para exames IGCSE, AS & A Levels, com foco na performance e autonomia de estudo.</p>
+        </div>
+      </div>
+      <div class="niveis-btn">
+        <a href="servicos.html" class="btn-cta" data-i18n="exploreServices">Explorar Serviços</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pacotes -->
+  <section class="section pacotes">
+    <div class="container">
+      <h2 class="section-title" data-i18n="packagesTitle">Pacotes Disponíveis</h2>
+      <div class="dificuldades-grid">
+        <div class="card basico">
+          <h3 data-i18n="basicPackage">Pacote Básico</h3>
+          <p data-i18n="basicDesc">Inclui 4 aulas por mês.<br>Ideal para revisão de conteúdos ou dificuldades específicas.</p>
+        </div>
+        <div class="card intermedio">
+          <h3 data-i18n="intermediatePackage">Pacote Intermédio</h3>
+          <p data-i18n="intermediateDesc">Inclui 8 aulas por mês.<br>Recomendado para acompanhamento regular de matérias escolares.</p>
+        </div>
+        <div class="card intensivo">
+          <h3 data-i18n="intensivePackage">Pacote Intensivo</h3>
+          <p data-i18n="intensiveDesc">Inclui 12+ aulas por mês.<br>Preparação intensiva para exames Cambridge.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Contacto via WhatsApp -->
+  <section id="contacto" class="section contacto-section">
+    <div class="container">
+      <h2 class="section-title" data-i18n="contactTitle">Contacte-nos</h2>
+      <p class="centered-text" data-i18n="contactDesc">
+        Tem dúvidas ou gostaria de saber mais sobre os nossos serviços?<br>
+        Fale connosco diretamente no WhatsApp.
+      </p>
+      <div class="contacto-cta">
+        <a href="https://wa.me/258858724687" target="_blank" class="btn-cta">
+          <img src="img/sapp.jpeg" alt="WhatsApp" class="whatsapp-icon">
+          <span data-i18n="whatsappTalk">Fale no WhatsApp</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="container">
+      <p>&copy; 2025 Active Learning Academy - <span data-i18n="rights">Todos os direitos reservados</span>.
+        <br><span data-i18n="developedBy">Desenvolvido Por</span> Eng:Chelton Mucivane
+      </p>
+    </div>
+  </footer>
+
+</body>
+</html>
