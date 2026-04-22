@@ -21,6 +21,9 @@ if (!isset($_SESSION['usuario_id']) || !isset($_SESSION['admin']) || $_SESSION['
 $conn = new mysqli("localhost", "root", "", "sistema_login");
 if ($conn->connect_error) die("Erro de conexão: " . $conn->connect_error);
 
+// Garantir que a coluna pacote_valido_ate aceite NULL (para evitar erros de data inválida)
+$conn->query("ALTER TABLE fichas MODIFY pacote_valido_ate DATE NULL");
+
 $mensagem = "";
 $mensagem_professor = "";
 
@@ -120,25 +123,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['acao_professor'])) {
 $result_professores_combo = $conn->query("SELECT p.id AS professor_id, u.nome 
     FROM professores p JOIN usuarios u ON u.id=p.usuario_id ORDER BY u.nome ASC");
 
-// Atualiza ficha via botão Salvar
+// ========== ATUALIZAÇÃO DE FICHA (CORRIGIDA DEFINITIVAMENTE) ==========
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ficha_id']) && isset($_POST['acao']) && $_POST['acao'] === 'salvar') {
-    $professor = $_POST['professor'];
-    $aulas_agendadas = $_POST['aulas_agendadas'];
-    $pacote_confirmado = substr($_POST['pacote_confirmado'], 0, 50);
-    $aulas_restantes = $_POST['aulas_restantes'];
+    $professor = $_POST['professor'] ?? '';
+    $aulas_agendadas = $_POST['aulas_agendadas'] ?? '';
+    $pacote_confirmado = substr($_POST['pacote_confirmado'] ?? '', 0, 50);
+    $aulas_restantes = (int)($_POST['aulas_restantes'] ?? 0);
     $ficha_validada = isset($_POST['ficha_validada']) ? 1 : 0;
-    $ficha_id = $_POST['ficha_id'];
+    $ficha_id = (int)$_POST['ficha_id'];
 
-    $pacote_valido_ate = !empty($_POST['pacote_valido_ate']) ? date('Y-m-d', strtotime($_POST['pacote_valido_ate'])) : NULL;
+    // --- VALIDAÇÃO DEFINITIVA DA DATA ---
+    $pacote_valido_ate = null;
+    $data_raw = trim($_POST['pacote_valido_ate'] ?? '');
+    
+    // Log para debug (verá no log do servidor)
+    error_log("[DEBUG] Data recebida: '" . $data_raw . "'");
 
-    $stmt = $conn->prepare("UPDATE fichas 
-        SET professor_atribuido=?, aulas_agendadas=?, pacote_confirmado=?, 
-            pacote_valido_ate=?, aulas_restantes=?, ficha_validada=? 
-        WHERE id=?");
-    $stmt->bind_param("sssiiii", $professor, $aulas_agendadas, $pacote_confirmado, $pacote_valido_ate, $aulas_restantes, $ficha_validada, $ficha_id);
-    $stmt->execute();
+    // Só aceita se estiver exatamente no formato YYYY-MM-DD
+    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $data_raw)) {
+        $date = DateTime::createFromFormat('Y-m-d', $data_raw);
+        if ($date && $date->format('Y-m-d') === $data_raw) {
+            $pacote_valido_ate = $data_raw;
+        }
+    }
+
+    // Se ainda for nulo e for um ano isolado (ex: 2026) -> ignora (mantém NULL)
+    if ($pacote_valido_ate === null && preg_match('/^\d{4}$/', $data_raw)) {
+        error_log("[DEBUG] Ano isolado ignorado: $data_raw");
+        $pacote_valido_ate = null;
+    }
+
+    // --- QUERY CONDICIONAL ---
+    if ($pacote_valido_ate === null) {
+        $stmt = $conn->prepare("UPDATE fichas 
+            SET professor_atribuido=?, aulas_agendadas=?, pacote_confirmado=?, 
+                pacote_valido_ate = NULL, aulas_restantes=?, ficha_validada=? 
+            WHERE id=?");
+        $stmt->bind_param("sssiii", $professor, $aulas_agendadas, $pacote_confirmado, $aulas_restantes, $ficha_validada, $ficha_id);
+    } else {
+        $stmt = $conn->prepare("UPDATE fichas 
+            SET professor_atribuido=?, aulas_agendadas=?, pacote_confirmado=?, 
+                pacote_valido_ate = ?, aulas_restantes=?, ficha_validada=? 
+            WHERE id=?");
+        $stmt->bind_param("ssssiii", $professor, $aulas_agendadas, $pacote_confirmado, $pacote_valido_ate, $aulas_restantes, $ficha_validada, $ficha_id);
+    }
+
+    if ($stmt->execute()) {
+        $mensagem = "Ficha atualizada com sucesso.";
+    } else {
+        $mensagem = "Erro ao atualizar ficha: " . $stmt->error;
+        error_log("[ERRO] " . $stmt->error);
+    }
     $stmt->close();
-    $mensagem = "Ficha atualizada com sucesso.";
 }
 
 // Listar fichas
@@ -185,7 +221,7 @@ function excluirFicha(fichaId,botao){
         headers:{'Content-Type':'application/x-www-form-urlencoded'},
         body:'ficha_id='+fichaId
     }).then(res=>res.text()).then(res=>{
-        if(res.trim()==='ok') linha.innerHTML='<td colspan="21" style="text-align:center; color:red;">Ficha excluída</td>';
+        if(res.trim()==='ok') linha.innerHTML='<td colspan="21" style="text-align:center; color:red;">Ficha excluída<\/td>';
         else alert('Erro ao excluir ficha: '+res);
     }).catch(()=>alert('Erro ao excluir ficha.'));
 }

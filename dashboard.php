@@ -120,10 +120,10 @@ if ($ficha_id > 0) {
 }
 
 // ========== BUSCAR INFORMAÇÕES DO PACOTE ==========
-$info_pacote_completa = getInfoPacoteCompleta($conn, $ficha_id, $pacote_nome, $data_pacote_inicio ?? null);
+$info_pacote_completa = getInfoPacoteCompleta($conn, $ficha_id, $pacote_nome, $data_pagamento);
 
 // Calcular período do pacote para o calendário
-$info_periodo = calcularAulasDoPeriodo($pacote_nome, $data_pacote_inicio ?? null, $horarios);
+$info_periodo = calcularAulasDoPeriodo($pacote_nome, $data_pagamento, $horarios);
 
 // Dados para exibição
 $pacote_dias_semana = [
@@ -137,7 +137,7 @@ $validade_formatada = '';
 $data_inicio_obj = null;
 $data_fim_obj = null;
 
-if ($info_pacote_completa['data_fim']) {
+if ($info_pacote_completa['data_fim'] ?? false) {
     $validade_obj = new DateTime($info_pacote_completa['data_fim']);
     $validade_formatada = $validade_obj->format('d/m/Y');
     $data_fim_obj = $validade_obj;
@@ -145,7 +145,7 @@ if ($info_pacote_completa['data_fim']) {
 
 // Data de início formatada
 $inicio_formatada = '';
-if ($info_pacote_completa['data_inicio']) {
+if ($info_pacote_completa['data_inicio'] ?? false) {
     $inicio_obj = new DateTime($info_pacote_completa['data_inicio']);
     $inicio_formatada = $inicio_obj->format('d/m/Y');
     $data_inicio_obj = $inicio_obj;
@@ -309,6 +309,7 @@ $valor_mensal = $row['valor_mensal'] ?? $valor_pacote;
         ]) ?>;
         window.diasAulaPeriodo = <?= json_encode($dias_aula_periodo) ?>;
         window.notificacoesNaoLidas = <?= $notificacoes_nao_lidas ?>;
+        window.usuarioNome = '<?= htmlspecialchars($usuario_nome) ?>';
     </script>
 </head>
 <body>
@@ -349,7 +350,6 @@ $valor_mensal = $row['valor_mensal'] ?? $valor_pacote;
 
 <!-- CONTEÚDO -->
 <main class="content">
-
     <!-- Boas-vindas -->
     <section id="boas_vindas" class="dashboard-section">
         <div class="welcome-card">
@@ -703,7 +703,7 @@ $valor_mensal = $row['valor_mensal'] ?? $valor_pacote;
                                     $data_attributes .= " data-status='$status_aula'";
                                 }
                                 
-                                // REGRA PARA CANCELAR
+                                // REGRA PARA CANCELAR (apenas se for futuro e estiver agendada)
                                 if ($aula_id && $is_futuro && $status_aula === 'agendado' && $dentro_periodo) {
                                     $data_attributes .= " data-pode-cancelar='true'";
                                 }
@@ -983,20 +983,6 @@ $valor_mensal = $row['valor_mensal'] ?? $valor_pacote;
     </div>
 </div>
 
-<!-- ===== MODAL PARA CANCELAR/VER AULA (CALENDÁRIO) ===== -->
-<div id="modalAula" class="modal-overlay">
-    <div class="modal-conteudo" style="max-width: 400px;">
-        <div class="modal-header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-            <h2><i class="fas fa-calendar-day"></i> Detalhes da Aula</h2>
-            <button class="modal-close" onclick="fecharModalAula()">&times;</button>
-        </div>
-        
-        <div class="modal-body" id="modal-aula-conteudo">
-            <!-- Preenchido via JavaScript -->
-        </div>
-    </div>
-</div>
-
 <!-- ===== MODAL PARA CANCELAR AULA COM JUSTIFICATIVA (ALUNO) ===== -->
 <div id="modalCancelarAluno" class="modal-overlay">
     <div class="modal-conteudo" style="max-width: 450px;">
@@ -1042,11 +1028,9 @@ $valor_mensal = $row['valor_mensal'] ?? $valor_pacote;
     </div>
 </div>
 
-<!-- Modal de Agendamento (removido, mas mantido para compatibilidade) -->
-<div id="modalAgendamento" class="modal-overlay" style="display: none;"></div>
-
-<!-- CSS adicional para o calendário real e notificações -->
+<!-- CSS adicional para o calendário e notificações -->
 <style>
+/* ===== ESTILOS DO CALENDÁRIO ===== */
 .calendario-navegacao {
     display: flex;
     justify-content: space-between;
@@ -1092,12 +1076,6 @@ $valor_mensal = $row['valor_mensal'] ?? $valor_pacote;
     pointer-events: none;
 }
 
-.calendario-dia.fora-periodo:hover {
-    transform: none;
-    box-shadow: none;
-    border-color: #e2e8f0;
-}
-
 .legenda-cor.fora-periodo {
     background: #f1f5f9;
     border: 1px solid #e2e8f0;
@@ -1116,34 +1094,376 @@ $valor_mensal = $row['valor_mensal'] ?? $valor_pacote;
     gap: 8px;
 }
 
-.periodo-info i {
+/* ===== ESTILOS DO CALENDÁRIO CARD ===== */
+.calendario-card {
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    overflow: hidden;
+    width: 100%;
+    max-width: 700px;
+    margin: 0 auto;
+}
+
+.calendario-card-header {
+    background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+    padding: 20px;
+    color: white;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.calendario-card-titulo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.calendario-card-titulo i {
+    font-size: 1.8rem;
+}
+
+.calendario-card-titulo h2 {
+    margin: 0;
+    font-size: 1.3rem;
+}
+
+.calendario-card-status .status-badge {
+    background: rgba(255,255,255,0.2);
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.calendario-info-pacote {
+    display: flex;
+    justify-content: space-around;
+    padding: 15px;
+    background: #f8fafd;
+    border-bottom: 1px solid #eef2f6;
+}
+
+.info-pacote-item {
+    text-align: center;
+}
+
+.info-pacote-item .info-label {
+    display: block;
+    font-size: 0.7rem;
+    color: #7f8c8d;
+    margin-bottom: 5px;
+}
+
+.info-pacote-item .info-valor {
     font-size: 1rem;
+    font-weight: 600;
+    color: #2c3e50;
 }
 
-/* Status badges */
-.status-badge.status-pendente {
-    background: #fff3cd;
-    color: #856404;
-    padding: 6px 12px;
-    border-radius: 20px;
-    display: inline-flex;
+.info-pacote-item .info-detalhe {
+    font-size: 0.7rem;
+    color: #95a5a6;
+}
+
+.calendario-container {
+    padding: 20px;
+}
+
+.calendario-dias-semana {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    text-align: center;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #7f8c8d;
+    margin-bottom: 10px;
+}
+
+.calendario-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+}
+
+.calendario-dia {
+    aspect-ratio: 1;
+    display: flex;
     align-items: center;
-    gap: 5px;
+    justify-content: center;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: #2c3e50;
+    background: #f8fafd;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 1px solid transparent;
+    position: relative;
+}
+
+.calendario-dia:hover {
+    background: #e8f0f5;
+    border-color: #3498db;
+    transform: scale(1.02);
+}
+
+.calendario-dia.vazio {
+    background: transparent;
+    cursor: default;
+    pointer-events: none;
+}
+
+.calendario-dia.dia-aula {
+    background: #e8f0f5;
+    border-color: #3498db40;
     font-weight: 600;
 }
 
-.status-badge.status-pago {
-    background: #d4edda;
-    color: #155724;
-    padding: 6px 12px;
-    border-radius: 20px;
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-weight: 600;
+.calendario-dia.hoje {
+    border: 2px solid #3498db;
+    font-weight: 700;
 }
 
-/* Estilos para notificações */
+.calendario-dia.aula-realizada {
+    background: #27ae60;
+    color: white;
+}
+
+.calendario-dia.aula-cancelada-aluno {
+    background: #e74c3c;
+    color: white;
+}
+
+.calendario-dia.aula-cancelada-professor {
+    background: #e67e22;
+    color: white;
+}
+
+.calendario-dia.aula-pendente-professor {
+    background: #f39c12;
+    color: white;
+}
+
+.icone-status {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    font-size: 0.6rem;
+    width: 14px;
+    height: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.9);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.icone-status.realizado {
+    background: #27ae60;
+    color: white;
+}
+
+.icone-status.cancelado-aluno {
+    background: #e74c3c;
+    color: white;
+}
+
+.icone-status.cancelado-professor {
+    background: #e67e22;
+    color: white;
+}
+
+.icone-status.pendente {
+    background: #f39c12;
+    color: white;
+}
+
+.icone-status.agendado {
+    background: #3498db;
+    color: white;
+}
+
+.calendario-legenda {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #eef2f6;
+    font-size: 0.7rem;
+}
+
+.legenda-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.legenda-cor {
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+}
+
+.legenda-cor.aula-agendada {
+    background: #e8f0f5;
+    border: 1px solid #3498db40;
+}
+
+.legenda-cor.aula-realizada {
+    background: #27ae60;
+}
+
+.legenda-cor.aula-cancelada-aluno {
+    background: #e74c3c;
+}
+
+.legenda-cor.aula-cancelada-prof {
+    background: #e67e22;
+}
+
+.legenda-cor.aula-pendente-prof {
+    background: #f39c12;
+}
+
+.legenda-cor.hoje-legend {
+    background: white;
+    border: 2px solid #3498db;
+}
+
+.calendario-resumo {
+    display: flex;
+    justify-content: space-around;
+    padding: 15px;
+    background: #f8fafd;
+    border-top: 1px solid #eef2f6;
+}
+
+.resumo-item {
+    text-align: center;
+}
+
+.resumo-item .resumo-label {
+    font-size: 0.7rem;
+    color: #7f8c8d;
+    display: block;
+}
+
+.resumo-item .resumo-valor {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.resumo-item.pendentes .resumo-valor {
+    color: #f39c12;
+}
+
+.resumo-item.creditos .resumo-valor {
+    color: #27ae60;
+}
+
+/* ===== MENU MOBILE ===== */
+.menu-toggle {
+    display: none;
+    position: fixed;
+    top: 15px;
+    left: 15px;
+    z-index: 1001;
+    background: #3498db;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    padding: 12px 15px;
+    cursor: pointer;
+    font-size: 1.2rem;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+.menu-close {
+    display: none;
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    background: rgba(255,255,255,0.2);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    transition: background 0.3s;
+}
+
+.sidebar-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 999;
+    backdrop-filter: blur(2px);
+}
+
+@media (max-width: 768px) {
+    .menu-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .menu-close {
+        display: flex;
+    }
+    
+    .sidebar {
+        position: fixed;
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+        z-index: 1000;
+    }
+    
+    .sidebar.active {
+        transform: translateX(0);
+    }
+    
+    .sidebar-overlay.active {
+        display: block;
+    }
+    
+    .content {
+        margin-left: 0;
+        padding-top: 70px;
+    }
+    
+    .calendario-card-header {
+        flex-direction: column;
+        gap: 10px;
+        text-align: center;
+    }
+    
+    .calendario-info-pacote {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .calendario-resumo {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+}
+
+/* ===== NOTIFICAÇÕES ===== */
 .notificacoes-container {
     position: relative;
     display: inline-block;
@@ -1190,6 +1510,11 @@ $valor_mensal = $row['valor_mensal'] ?? $valor_pacote;
     z-index: 1000;
     margin-top: 10px;
     border: 1px solid #eef2f6;
+    display: none;
+}
+
+.notificacoes-dropdown.active {
+    display: block;
 }
 
 .notificacoes-header {
@@ -1237,7 +1562,6 @@ $valor_mensal = $row['valor_mensal'] ?? $valor_pacote;
     border-bottom: 1px solid #eef2f6;
     cursor: pointer;
     transition: background 0.2s;
-    position: relative;
 }
 
 .notificacao-item:hover {
@@ -1266,9 +1590,6 @@ $valor_mensal = $row['valor_mensal'] ?? $valor_pacote;
 .notificacao-data {
     font-size: 0.7rem;
     color: #95a5a6;
-    display: flex;
-    align-items: center;
-    gap: 5px;
 }
 
 .notificacao-link {
@@ -1290,177 +1611,76 @@ $valor_mensal = $row['valor_mensal'] ?? $valor_pacote;
     color: #95a5a6;
 }
 
-.notificacao-vazia i {
-    font-size: 2.5rem;
-    margin-bottom: 15px;
-    color: #d0d9e0;
+/* ===== MODAIS ===== */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 10000;
+    align-items: center;
+    justify-content: center;
 }
 
-.notificacao-vazia p {
-    font-size: 0.9rem;
+.modal-overlay.active {
+    display: flex;
+}
+
+.modal-conteudo {
+    background: white;
+    border-radius: 20px;
+    max-width: 90%;
+    width: 600px;
+    max-height: 85vh;
+    overflow: auto;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+}
+
+.modal-header {
+    padding: 20px;
+    background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+    color: white;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-radius: 20px 20px 0 0;
+}
+
+.modal-header h2 {
     margin: 0;
+    font-size: 1.2rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background 0.2s;
+}
+
+.modal-close:hover {
+    background: rgba(255,255,255,0.2);
+}
+
+.modal-body {
+    padding: 20px;
 }
 </style>
-
-<script>
-// Variáveis globais para funções do modal
-function fecharModal(modalId) {
-    const modal = document.getElementById(modalId);
-    if (modal) {
-        modal.classList.remove('active');
-        document.body.style.overflow = 'auto';
-    }
-}
-
-function abrirModal(modalId) {
-    const modal = document.getElementById(modalId);
-    if (modal) {
-        modal.classList.add('active');
-        document.body.style.overflow = 'hidden';
-    }
-}
-
-function fecharModalDetalhes() {
-    fecharModal('modalDetalhes');
-}
-
-function fecharModalAula() {
-    fecharModal('modalAula');
-}
-
-// Funções para notificações
-function toggleNotificacoes() {
-    const dropdown = document.getElementById('notificacoesDropdown');
-    if (dropdown) {
-        dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
-    }
-}
-
-function marcarComoLida(notificacaoId) {
-    fetch('notificacoes.php?acao=marcar_lida', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: notificacaoId })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            const item = document.querySelector(`.notificacao-item[data-id="${notificacaoId}"]`);
-            if (item) {
-                item.classList.remove('nao-lida');
-                item.classList.add('lida');
-            }
-            atualizarContadorNotificacoes();
-        }
-    });
-}
-
-function marcarTodasComoLidas() {
-    fetch('notificacoes.php?acao=marcar_todas_lidas', {
-        method: 'POST'
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            document.querySelectorAll('.notificacao-item.nao-lida').forEach(item => {
-                item.classList.remove('nao-lida');
-                item.classList.add('lida');
-            });
-            atualizarContadorNotificacoes();
-        }
-    });
-}
-
-function atualizarContadorNotificacoes() {
-    fetch('notificacoes.php?acao=listar&nao_lidas=1&limite=1')
-        .then(response => response.json())
-        .then(data => {
-            const badge = document.querySelector('.notificacoes-badge');
-            if (data.nao_lidas > 0) {
-                if (badge) {
-                    badge.textContent = data.nao_lidas;
-                } else {
-                    const btn = document.querySelector('.notificacoes-btn');
-                    const newBadge = document.createElement('span');
-                    newBadge.className = 'notificacoes-badge';
-                    newBadge.textContent = data.nao_lidas;
-                    btn.appendChild(newBadge);
-                }
-            } else {
-                if (badge) {
-                    badge.remove();
-                }
-            }
-        });
-}
-
-// Funções para seções
-function mostrarSecao(id, event) {
-    if (event) event.preventDefault();
-    
-    document.querySelectorAll('.dashboard-section').forEach(section => {
-        section.classList.add('hidden');
-    });
-    
-    document.getElementById(id).classList.remove('hidden');
-    
-    document.querySelectorAll('.sidebar ul li a').forEach(link => {
-        link.classList.remove('active');
-    });
-    
-    if (event && event.target) {
-        const link = event.target.closest('a');
-        if (link) link.classList.add('active');
-    }
-}
-
-// Fechar dropdown ao clicar fora
-document.addEventListener('click', function(event) {
-    if (!event.target.closest('.notificacoes-container')) {
-        const dropdown = document.getElementById('notificacoesDropdown');
-        if (dropdown) {
-            dropdown.style.display = 'none';
-        }
-    }
-});
-
-// Menu mobile
-document.addEventListener('DOMContentLoaded', function() {
-    const menuToggle = document.getElementById('menuToggle');
-    const menuClose = document.getElementById('menuClose');
-    const overlay = document.getElementById('sidebarOverlay');
-    const sidebar = document.getElementById('sidebar');
-    
-    if (menuToggle) {
-        menuToggle.addEventListener('click', function() {
-            sidebar.classList.add('active');
-            overlay.classList.add('active');
-            document.body.style.overflow = 'hidden';
-        });
-    }
-    
-    if (menuClose) {
-        menuClose.addEventListener('click', function() {
-            sidebar.classList.remove('active');
-            overlay.classList.remove('active');
-            document.body.style.overflow = 'auto';
-        });
-    }
-    
-    if (overlay) {
-        overlay.addEventListener('click', function() {
-            sidebar.classList.remove('active');
-            overlay.classList.remove('active');
-            document.body.style.overflow = 'auto';
-        });
-    }
-    
-    // Se não estiver pago, garantir que a seção de aulas fique escondida
-    if (window.pagamentoStatus !== 'pago') {
-        document.getElementById('aulas').classList.add('hidden');
-    }
-});
-</script>
 
 <script src="JavaScript/dashboard.js"></script>
 </body>

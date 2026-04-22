@@ -446,6 +446,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     
                     @consumirAula($conn, $ficha_id, $aula_id, 'realizado');
                     
+                    // ===== NOVO: CRIAR NOTIFICAÇÃO PARA O ALUNO (AULA REALIZADA) =====
+                    $sql_aluno_user = "SELECT usuario_id FROM fichas WHERE id = ?";
+                    $stmt_aluno = $conn->prepare($sql_aluno_user);
+                    $stmt_aluno->bind_param("i", $ficha_id);
+                    $stmt_aluno->execute();
+                    $result_aluno = $stmt_aluno->get_result();
+                    $aluno_user = $result_aluno->fetch_assoc();
+                    
+                    if ($aluno_user && $aluno_user['usuario_id']) {
+                        $data_aula = new DateTime($aula['data_hora']);
+                        $data_formatada = $data_aula->format('d/m/Y H:i');
+                        $titulo = "✅ Aula registada";
+                        $mensagem_notificacao = "O professor registou a aula do dia $data_formatada.";
+                        $link = "dashboard.php?mes=" . $data_aula->format('m') . 
+                                "&ano=" . $data_aula->format('Y');
+                        
+                        criarNotificacao($conn, $aluno_user['usuario_id'], 'aluno', $titulo, $mensagem_notificacao, $link);
+                        
+                        error_log("📢 Notificação de aula realizada criada para o aluno ID: " . $aluno_user['usuario_id']);
+                    }
+                    
                     $conn->commit();
                     
                     echo json_encode(['success' => true, 'message' => 'Aula concluída com ' . count($disciplinas) . ' disciplinas']);
@@ -930,8 +951,8 @@ function gerarCalendario($aluno_id, $horarios, $aulas_mes, $mes, $ano) {
                         <th>Calendário de Aulas (<?= $meses_portugues[$mes_atual] ?>)</th>
                         <th>Regime</th>
                         <th>Dificuldades</th>
-                        <th>Ações</th>
-                    </tr>
+                       <!-- <th>Ações</th>-->
+                    </td>
                 </thead>
                 <tbody>
                 <?php foreach($alunos_com_horarios as $aluno): 
@@ -1004,15 +1025,15 @@ function gerarCalendario($aluno_id, $horarios, $aulas_mes, $mes, $ano) {
                             </div>
                         </td>
                         <td>
-                            <div class="aluno-actions">
-                                <button onclick="abrirModalRegistro(<?= $aluno['id'] ?>, '<?= htmlspecialchars(addslashes($aluno['nome'])) ?>', null, '<?= $aluno['horarios'][0]['horario'] ?? '' ?>')" 
+                           <! <div class="aluno-actions">
+                               <!-- <button onclick="abrirModalRegistro(<?= $aluno['id'] ?>, '<?= htmlspecialchars(addslashes($aluno['nome'])) ?>', null, '<?= $aluno['horarios'][0]['horario'] ?? '' ?>')" 
                                         class="btn btn-registrar btn-sm btn-completo">
                                     <i class="fas fa-plus-circle"></i> Registrar Aula
                                 </button>
                                 <button onclick="verAulasAluno(<?= $aluno['id'] ?>, '<?= htmlspecialchars(addslashes($aluno['nome'])) ?>')" 
                                         class="btn btn-info btn-sm btn-completo">
                                     <i class="fas fa-calendar-alt"></i> Ver Aulas
-                                </button>
+                                </button>-->
                             </div>
                         </td>
                     </tr>
@@ -1032,6 +1053,19 @@ function gerarCalendario($aluno_id, $horarios, $aulas_mes, $mes, $ano) {
     </section>
 
 </main>
+
+<!-- ===== MODAL DE DETALHES DA AULA ===== -->
+<div id="modalDetalhes" class="modal">
+    <div class="modal-content" style="max-width: 750px;">
+        <div class="modal-header">
+            <h3><i class="fas fa-info-circle"></i> Detalhes da Aula</h3>
+            <button class="close" onclick="fecharModal('modalDetalhes')">&times;</button>
+        </div>
+        <div class="modal-body" id="modal-body-conteudo">
+            <!-- Conteúdo preenchido via JavaScript -->
+        </div>
+    </div>
+</div>
 
 <!-- Modal para marcar aula como realizada -->
 <div id="modalDada" class="modal">

@@ -743,7 +743,7 @@ function confirmarCancelamentoAntecipado() {
     });
 }
 
-// ===== FUNÇÃO PARA VER DETALHES DA AULA =====
+// ===== FUNÇÃO PARA VER DETALHES DA AULA (MELHORADA) =====
 function verDetalhesAula(aulaId) {
     console.log('Ver detalhes da aula ID:', aulaId);
     
@@ -764,47 +764,127 @@ function verDetalhesAula(aulaId) {
     fetch(`buscar_aula.php?aula_id=${aulaId}`)
         .then(response => response.json())
         .then(data => {
-            if (data.success) {
-                let html = '<div class="aula-info">';
-                html += '<p><strong>Data:</strong> ' + new Date(data.data_hora).toLocaleDateString('pt-PT') + '</p>';
-                html += '<p><strong>Hora:</strong> ' + new Date(data.data_hora).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' }) + '</p>';
-                
-                // Traduzir status
-                let statusTexto = data.status;
-                if (data.status === 'realizado') statusTexto = '✅ Realizada';
-                else if (data.status === 'cancelado_aluno') statusTexto = '❌ Cancelada (aluno)';
-                else if (data.status === 'cancelado_professor') statusTexto = '🔴 Cancelada (professor)';
-                else if (data.status === 'agendado') statusTexto = '⏳ Agendada';
-                else if (data.status === 'pendente_professor') statusTexto = '⏰ Pendente';
-                
-                html += '<p><strong>Status:</strong> ' + statusTexto + '</p>';
-                html += '<p><strong>Observações:</strong> ' + (data.observacoes_professor || 'Nenhuma') + '</p>';
-                
-                if (data.disciplinas && data.disciplinas.length > 0) {
-                    html += '<h4>Disciplinas</h4>';
-                    data.disciplinas.forEach(d => {
-                        html += '<div style="margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 5px; border-left: 3px solid #3498db;">';
-                        html += '<strong><i class="fas fa-graduation-cap"></i> ' + d.disciplina + '</strong>';
-                        html += '<p><small><i class="fas fa-book-open"></i> Conteúdo: ' + (d.conteudo_abordado || 'Não informado') + '</small></p>';
-                        if (d.dificuldades_identificadas) {
-                            html += '<p><small><i class="fas fa-exclamation-triangle"></i> Dificuldades: ' + d.dificuldades_identificadas + '</small></p>';
-                        }
-                        if (d.observacoes_professor) {
-                            html += '<p><small><i class="fas fa-clipboard"></i> Observações: ' + d.observacoes_professor + '</small></p>';
-                        }
-                        html += '</div>';
-                    });
-                } else {
-                    html += '<p><em>Nenhuma disciplina registrada</em></p>';
-                }
-                
-                html += '</div>';
-                
-                document.getElementById('modal-body-conteudo').innerHTML = html;
-            } else {
-                alert('❌ Erro ao carregar detalhes da aula.');
+            if (!data.success) {
+                alert('❌ Erro: ' + data.message);
                 fecharModal('modalDetalhes');
+                return;
             }
+            
+            const aula = data.data;
+            const dataHora = new Date(aula.data_hora);
+            const dataStr = dataHora.toLocaleDateString('pt-PT');
+            const horaStr = dataHora.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
+            
+            // Traduzir status e definir cores
+            let statusTexto = '', statusCor = '';
+            switch (aula.status) {
+                case 'realizado':
+                    statusTexto = '✅ Realizada';
+                    statusCor = '#27ae60';
+                    break;
+                case 'cancelado_aluno':
+                    statusTexto = '❌ Cancelada pelo aluno';
+                    statusCor = '#e74c3c';
+                    break;
+                case 'cancelado_professor':
+                    statusTexto = '❌ Cancelada pelo professor';
+                    statusCor = '#e67e22';
+                    break;
+                case 'agendado':
+                    statusTexto = '⏳ Agendada';
+                    statusCor = '#f39c12';
+                    break;
+                case 'pendente_professor':
+                    statusTexto = '⏰ Pendente (professor)';
+                    statusCor = '#f39c12';
+                    break;
+                default:
+                    statusTexto = aula.status;
+                    statusCor = '#95a5a6';
+            }
+            
+            let html = `
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;">
+                        <div>
+                            <div style="color: #7f8c8d; font-size: 0.85rem;">Data</div>
+                            <div style="font-weight: 600;">${dataStr}</div>
+                        </div>
+                        <div>
+                            <div style="color: #7f8c8d; font-size: 0.85rem;">Hora</div>
+                            <div style="font-weight: 600;">${horaStr}</div>
+                        </div>
+                        <div>
+                            <div style="color: #7f8c8d; font-size: 0.85rem;">Professor</div>
+                            <div style="font-weight: 600;">${aula.professor_nome || 'Não atribuído'}</div>
+                        </div>
+                        <div>
+                            <div style="color: #7f8c8d; font-size: 0.85rem;">Status</div>
+                            <div style="font-weight: 600; color: ${statusCor};">${statusTexto}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Se a aula foi cancelada, mostrar motivo e quem cancelou
+            if (aula.status === 'cancelado_aluno' || aula.status === 'cancelado_professor') {
+                const cancelador = aula.status === 'cancelado_aluno' ? 'Aluno' : 'Professor';
+                // O motivo está na coluna observacoes_professor
+                let motivo = aula.observacoes_professor || 'Motivo não informado';
+                // Remover possíveis prefixos (como "❌ Cancelada pelo aluno. Motivo: ")
+                if (motivo.includes('Motivo:')) {
+                    const match = motivo.match(/Motivo:\s*(.+)/);
+                    if (match) motivo = match[1];
+                }
+                html += `
+                    <div style="background: #ffe6e6; padding: 15px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid ${statusCor};">
+                        <strong><i class="fas fa-ban"></i> Cancelado por: ${cancelador}</strong><br>
+                        <strong>Motivo:</strong> ${motivo}
+                    </div>
+                `;
+            }
+            
+            // Disciplinas registadas (se houver)
+            if (aula.itens && aula.itens.length > 0) {
+                html += `<h4 style="margin: 20px 0 10px; color: #2c3e50;"><i class="fas fa-graduation-cap"></i> Disciplinas</h4>`;
+                html += `<div style="overflow-x: auto;">
+                            <table style="width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                                <thead style="background: #2c3e50; color: white;">
+                                    <tr>
+                                        <th style="padding: 12px; text-align: left;">Disciplina</th>
+                                        <th style="padding: 12px; text-align: left;">Conteúdo Abordado</th>
+                                        <th style="padding: 12px; text-align: left;">Dificuldades</th>
+                                        <th style="padding: 12px; text-align: left;">Observações</th>
+                                    </tr>
+                                </thead>
+                                <tbody>`;
+                aula.itens.forEach((item, index) => {
+                    const bgColor = index % 2 === 0 ? '#f8f9fa' : 'white';
+                    html += `
+                        <tr style="background: ${bgColor}; border-bottom: 1px solid #e9ecef;">
+                            <td style="padding: 12px; font-weight: 600; color: #2c3e50;">${item.disciplina || '—'}</td>
+                            <td style="padding: 12px;">${item.conteudo_abordado || '—'}</td>
+                            <td style="padding: 12px;">${item.dificuldades_identificadas || '—'}</td>
+                            <td style="padding: 12px;">${item.observacoes_professor || '—'}</td>
+                        </tr>
+                    `;
+                });
+                html += `</tbody></table></div>`;
+            } else if (aula.status === 'realizado') {
+                html += `<p style="margin-top: 10px;"><em>Nenhuma disciplina registada para esta aula.</em></p>`;
+            }
+            
+            // Observações gerais (se não for cancelada, para não repetir)
+            if (aula.observacoes_professor && aula.status !== 'cancelado_aluno' && aula.status !== 'cancelado_professor') {
+                html += `
+                    <div style="margin-top: 20px; background: #e3f2fd; padding: 15px; border-radius: 8px; border-left: 4px solid #2196F3;">
+                        <h5 style="margin: 0 0 8px 0; color: #1976d2;"><i class="fas fa-clipboard"></i> Observações Gerais</h5>
+                        <p style="margin: 0; color: #2c3e50;">${aula.observacoes_professor}</p>
+                    </div>
+                `;
+            }
+            
+            document.getElementById('modal-body-conteudo').innerHTML = html;
         })
         .catch(error => {
             console.error('Erro ao buscar detalhes da aula:', error);
