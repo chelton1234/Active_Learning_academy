@@ -313,7 +313,7 @@ $t = $textos[$idioma_atual];
         <p>
           <?php echo $t['dificuldades_text']; ?>
         </p>
-        <a href="Sign-in.php" class="btn-cta"><?php echo $t['dificuldades_btn']; ?></a>
+        <a href="FichaAluno.html" class="btn-cta"><?php echo $t['dificuldades_btn']; ?></a>
       </div>
     </div>
   </div>

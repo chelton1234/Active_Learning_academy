@@ -1,18 +1,9 @@
 <?php
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
-
+// dashboard_admin.php - Painel Administrativo (modal unificado)
 session_start();
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
 
-// Evita cache após logout
-header("Expires: Tue, 01 Jan 2000 00:00:00 GMT");
-header("Last-Modified: " . gmdate("D, d M Y H:i:s") . " GMT");
-header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
-header("Cache-Control: post-check=0, pre-check=0", false);
-header("Pragma: no-cache");
-
-// Verifica admin
 if (!isset($_SESSION['usuario_id']) || !isset($_SESSION['admin']) || $_SESSION['admin'] !== true) {
     header("Location: login.php");
     exit;
@@ -21,371 +12,600 @@ if (!isset($_SESSION['usuario_id']) || !isset($_SESSION['admin']) || $_SESSION['
 $conn = new mysqli("localhost", "root", "", "sistema_login");
 if ($conn->connect_error) die("Erro de conexão: " . $conn->connect_error);
 
-// Garantir que a coluna pacote_valido_ate aceite NULL (para evitar erros de data inválida)
-$conn->query("ALTER TABLE fichas MODIFY pacote_valido_ate DATE NULL");
+// ========== PROCESSAR EXCLUSÃO DE PEDIDO ==========
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['excluir_pedido_id'])) {
+    $id = (int)$_POST['excluir_pedido_id'];
+    $conn->query("DELETE FROM pedidos_explicadores WHERE id = $id");
+    $mensagem = "Pedido excluído.";
+}
 
-$mensagem = "";
-$mensagem_professor = "";
-
-// ==================== GESTÃO DE PROFESSORES ====================
+// ========== PROCESSAR EXCLUSÃO DE PROFESSOR ==========
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['acao_professor'])) {
-    $acao_professor = $_POST['acao_professor'];
-
-    if ($acao_professor === 'adicionar') {
+    $acao = $_POST['acao_professor'];
+    if ($acao === 'adicionar') {
         $nome = trim($_POST['nome']);
         $email = trim($_POST['email']);
-        $senha = !empty($_POST['senha']) ? password_hash($_POST['senha'], PASSWORD_DEFAULT) : null;
+        $senha = password_hash($_POST['senha'], PASSWORD_DEFAULT);
         $especialidade = trim($_POST['especialidade']);
         $telefone = trim($_POST['telefone']);
         $disponivel = $_POST['disponivel'] === 'sim' ? 'sim' : 'nao';
-
-        // Verifica se email já existe
-        $stmt_check = $conn->prepare("SELECT id FROM usuarios WHERE email = ?");
-        $stmt_check->bind_param("s", $email);
-        $stmt_check->execute();
-        $stmt_check->store_result();
-        if($stmt_check->num_rows > 0){
-            $mensagem_professor = "Erro: email já cadastrado!";
-            $stmt_check->close();
+        $stmt = $conn->prepare("INSERT INTO usuarios (nome, email, senha, tipo) VALUES (?, ?, ?, 'docente')");
+        $stmt->bind_param("sss", $nome, $email, $senha);
+        if ($stmt->execute()) {
+            $uid = $stmt->insert_id;
+            $stmt->close();
+            $stmt2 = $conn->prepare("INSERT INTO professores (usuario_id, especialidade, telefone, disponivel, criado_em) VALUES (?, ?, ?, ?, NOW())");
+            $stmt2->bind_param("isss", $uid, $especialidade, $telefone, $disponivel);
+            $stmt2->execute();
+            $stmt2->close();
+            $mensagem_prof = "Professor adicionado.";
         } else {
-            $stmt_check->close();
-
-            // Cria usuário com tipo docente
-            $stmt = $conn->prepare("INSERT INTO usuarios (nome, email, senha, tipo) VALUES (?, ?, ?, 'docente')");
-            $stmt->bind_param("sss", $nome, $email, $senha);
-            if ($stmt->execute()) {
-                $usuario_id = $stmt->insert_id;
-                $stmt->close();
-
-                // Cria registro de professor
-                $stmt2 = $conn->prepare("INSERT INTO professores (usuario_id, especialidade, telefone, disponivel, criado_em) VALUES (?, ?, ?, ?, NOW())");
-                $stmt2->bind_param("isss", $usuario_id, $especialidade, $telefone, $disponivel);
-                $stmt2->execute();
-                $stmt2->close();
-
-                $mensagem_professor = "Professor adicionado com sucesso!";
-            } else {
-                $mensagem_professor = "Erro ao criar usuário: " . $stmt->error;
-                $stmt->close();
-            }
+            $mensagem_prof = "Erro: email já existe?";
+            $stmt->close();
         }
-    }
-
-    elseif ($acao_professor === 'excluir' && !empty($_POST['professor_id'])) {
-        $professor_id = (int)$_POST['professor_id'];
-
-        $res = $conn->query("SELECT usuario_id FROM professores WHERE id=$professor_id");
-        if ($res && $res->num_rows > 0) {
-            $usuario_id = $res->fetch_assoc()['usuario_id'];
-
-            $conn->query("DELETE FROM professores WHERE id=$professor_id");
-            $conn->query("DELETE FROM usuarios WHERE id=$usuario_id");
-
-            $mensagem_professor = "Professor excluído com sucesso!";
+    } elseif ($acao === 'excluir' && !empty($_POST['professor_id'])) {
+        $pid = (int)$_POST['professor_id'];
+        $res = $conn->query("SELECT usuario_id FROM professores WHERE id = $pid");
+        if ($res && $row = $res->fetch_assoc()) {
+            $conn->query("DELETE FROM professores WHERE id = $pid");
+            $conn->query("DELETE FROM usuarios WHERE id = {$row['usuario_id']}");
+            $mensagem_prof = "Professor excluído.";
         }
-    }
-
-    elseif ($acao_professor === 'editar' && !empty($_POST['professor_id'])) {
-        $professor_id = (int)$_POST['professor_id'];
-        $nome = trim($_POST['nome']);
-        $email = trim($_POST['email']);
-        $senha = !empty($_POST['senha']) ? password_hash($_POST['senha'], PASSWORD_DEFAULT) : null;
-        $especialidade = trim($_POST['especialidade']);
-        $telefone = trim($_POST['telefone']);
-        $disponivel = $_POST['disponivel'] === 'sim' ? 'sim' : 'nao';
-
-        // Atualiza usuário
-        if ($senha) {
-            $stmt = $conn->prepare("UPDATE usuarios u JOIN professores p ON u.id=p.usuario_id 
-                                    SET u.nome=?, u.email=?, u.senha=? WHERE p.id=?");
-            $stmt->bind_param("sssi", $nome, $email, $senha, $professor_id);
-        } else {
-            $stmt = $conn->prepare("UPDATE usuarios u JOIN professores p ON u.id=p.usuario_id 
-                                    SET u.nome=?, u.email=? WHERE p.id=?");
-            $stmt->bind_param("ssi", $nome, $email, $professor_id);
-        }
-        $stmt->execute();
-        $stmt->close();
-
-        // Atualiza professor
-        $stmt2 = $conn->prepare("UPDATE professores SET especialidade=?, telefone=?, disponivel=? WHERE id=?");
-        $stmt2->bind_param("sssi", $especialidade, $telefone, $disponivel, $professor_id);
-        $stmt2->execute();
-        $stmt2->close();
-
-        $mensagem_professor = "Professor atualizado com sucesso!";
     }
 }
 
-// ==================== LISTAS ====================
+// ========== LISTAGENS ==========
+// Pedidos pendentes (solicitações)
+$pendentes = $conn->query("SELECT * FROM pedidos_explicadores WHERE status = 'pendente' ORDER BY data_submissao DESC");
 
-// Listar professores para combobox
-$result_professores_combo = $conn->query("SELECT p.id AS professor_id, u.nome 
-    FROM professores p JOIN usuarios u ON u.id=p.usuario_id ORDER BY u.nome ASC");
+// Alunos activos (utilizadores com tipo 'aluno' e que têm ficha)
+$alunos_activos = $conn->query("
+    SELECT u.id as usuario_id, u.nome, u.email, f.id as ficha_id, 
+           COALESCE(f.nivel_cambridge, f.nivel, '') as nivel_cambridge, 
+           f.pacote, f.professor_atribuido, f.pagamento_status, f.data_submissao as data_ficha
+    FROM usuarios u
+    JOIN fichas f ON u.id = f.usuario_id
+    WHERE u.tipo = 'aluno' AND u.ativo = 1
+    ORDER BY f.data_submissao DESC
+");
 
-// ========== ATUALIZAÇÃO DE FICHA (CORRIGIDA DEFINITIVAMENTE) ==========
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ficha_id']) && isset($_POST['acao']) && $_POST['acao'] === 'salvar') {
-    $professor = $_POST['professor'] ?? '';
-    $aulas_agendadas = $_POST['aulas_agendadas'] ?? '';
-    $pacote_confirmado = substr($_POST['pacote_confirmado'] ?? '', 0, 50);
-    $aulas_restantes = (int)($_POST['aulas_restantes'] ?? 0);
-    $ficha_validada = isset($_POST['ficha_validada']) ? 1 : 0;
-    $ficha_id = (int)$_POST['ficha_id'];
+// Professores para usar nos selects
+$professores = $conn->query("SELECT p.id, u.nome FROM professores p JOIN usuarios u ON u.id = p.usuario_id WHERE p.disponivel = 'sim' ORDER BY u.nome");
 
-    // --- VALIDAÇÃO DEFINITIVA DA DATA ---
-    $pacote_valido_ate = null;
-    $data_raw = trim($_POST['pacote_valido_ate'] ?? '');
+// Estatísticas
+$total_pendentes = $pendentes->num_rows;
+$total_activos = $alunos_activos->num_rows;
+$total_professores = $conn->query("SELECT COUNT(*) as t FROM professores")->fetch_assoc()['t'];
+
+// Notificações (pedidos pendentes nas últimas 24h)
+$notificacoes = $conn->query("SELECT id, nome, data_submissao FROM pedidos_explicadores WHERE status = 'pendente' AND data_submissao >= DATE_SUB(NOW(), INTERVAL 1 DAY) ORDER BY data_submissao DESC LIMIT 10");
+
+// Endpoint AJAX para polling de notificações
+if (isset($_GET['ajax']) && $_GET['ajax'] === 'notificacoes') {
+    $ultimo_id = isset($_GET['ultimo_id']) ? (int)$_GET['ultimo_id'] : 0;
+    $res = $conn->query("SELECT id, nome, data_submissao FROM pedidos_explicadores WHERE status = 'pendente' AND id > $ultimo_id ORDER BY id DESC LIMIT 5");
+    $novas = [];
+    while ($r = $res->fetch_assoc()) $novas[] = $r;
+    echo json_encode(['novas' => $novas]);
+    exit;
+}
+
+// Endpoint para obter detalhes do aluno (para a secção Alunos Activos)
+if (isset($_GET['ajax']) && $_GET['ajax'] === 'aluno_detalhes') {
+    $ficha_id = isset($_GET['ficha_id']) ? (int)$_GET['ficha_id'] : 0;
+    if (!$ficha_id) die(json_encode(['erro' => 'ID inválido']));
     
-    // Log para debug (verá no log do servidor)
-    error_log("[DEBUG] Data recebida: '" . $data_raw . "'");
-
-    // Só aceita se estiver exatamente no formato YYYY-MM-DD
-    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $data_raw)) {
-        $date = DateTime::createFromFormat('Y-m-d', $data_raw);
-        if ($date && $date->format('Y-m-d') === $data_raw) {
-            $pacote_valido_ate = $data_raw;
-        }
-    }
-
-    // Se ainda for nulo e for um ano isolado (ex: 2026) -> ignora (mantém NULL)
-    if ($pacote_valido_ate === null && preg_match('/^\d{4}$/', $data_raw)) {
-        error_log("[DEBUG] Ano isolado ignorado: $data_raw");
-        $pacote_valido_ate = null;
-    }
-
-    // --- QUERY CONDICIONAL ---
-    if ($pacote_valido_ate === null) {
-        $stmt = $conn->prepare("UPDATE fichas 
-            SET professor_atribuido=?, aulas_agendadas=?, pacote_confirmado=?, 
-                pacote_valido_ate = NULL, aulas_restantes=?, ficha_validada=? 
-            WHERE id=?");
-        $stmt->bind_param("sssiii", $professor, $aulas_agendadas, $pacote_confirmado, $aulas_restantes, $ficha_validada, $ficha_id);
-    } else {
-        $stmt = $conn->prepare("UPDATE fichas 
-            SET professor_atribuido=?, aulas_agendadas=?, pacote_confirmado=?, 
-                pacote_valido_ate = ?, aulas_restantes=?, ficha_validada=? 
-            WHERE id=?");
-        $stmt->bind_param("ssssiii", $professor, $aulas_agendadas, $pacote_confirmado, $pacote_valido_ate, $aulas_restantes, $ficha_validada, $ficha_id);
-    }
-
-    if ($stmt->execute()) {
-        $mensagem = "Ficha atualizada com sucesso.";
-    } else {
-        $mensagem = "Erro ao atualizar ficha: " . $stmt->error;
-        error_log("[ERRO] " . $stmt->error);
-    }
-    $stmt->close();
+    $stmt = $conn->prepare("
+        SELECT f.*, u.email, u.ativo 
+        FROM fichas f 
+        JOIN usuarios u ON u.id = f.usuario_id 
+        WHERE f.id = ?
+    ");
+    $stmt->bind_param("i", $ficha_id);
+    $stmt->execute();
+    $aluno = $stmt->get_result()->fetch_assoc();
+    if (!$aluno) die(json_encode(['erro' => 'Aluno não encontrado']));
+    
+    $horarios = [];
+    $stmt2 = $conn->prepare("SELECT dia_semana, horario FROM horarios_aulas WHERE ficha_id = ?");
+    $stmt2->bind_param("i", $ficha_id);
+    $stmt2->execute();
+    $res = $stmt2->get_result();
+    while ($h = $res->fetch_assoc()) $horarios[] = $h;
+    
+    $mes = isset($_GET['mes']) ? (int)$_GET['mes'] : date('m');
+    $ano = isset($_GET['ano']) ? (int)$_GET['ano'] : date('Y');
+    $aulas = [];
+    $stmt3 = $conn->prepare("
+        SELECT DATE(data_hora) as data, status, TIME(data_hora) as hora 
+        FROM agendamentos_aulas 
+        WHERE aluno_id = (SELECT id FROM fichas WHERE id = ?) 
+        AND MONTH(data_hora) = ? AND YEAR(data_hora) = ?
+    ");
+    $stmt3->bind_param("iii", $ficha_id, $mes, $ano);
+    $stmt3->execute();
+    $res3 = $stmt3->get_result();
+    while ($a = $res3->fetch_assoc()) $aulas[$a['data']] = ['status' => $a['status'], 'hora' => substr($a['hora'],0,5)];
+    
+    echo json_encode([
+        'aluno' => $aluno,
+        'horarios' => $horarios,
+        'aulas' => $aulas,
+        'mes' => $mes,
+        'ano' => $ano
+    ]);
+    exit;
 }
 
-// Listar fichas
-$result = $conn->query("SELECT * FROM fichas ORDER BY data_submissao DESC");
-
-// Listar professores para tabela de gestão
-$result_professores = $conn->query("SELECT p.id AS professor_id, u.nome, u.email, p.especialidade, p.telefone, p.disponivel, p.criado_em 
-FROM professores p JOIN usuarios u ON u.id=p.usuario_id ORDER BY p.criado_em DESC");
+// Endpoint para carregar calendário de um aluno (AJAX) – versão simplificada
+if (isset($_GET['ajax']) && $_GET['ajax'] === 'calendario_aluno') {
+    $ficha_id = (int)$_GET['ficha_id'];
+    $mes = (int)($_GET['mes'] ?? date('m'));
+    $ano = (int)($_GET['ano'] ?? date('Y'));
+    if (!$ficha_id) die('<p>Aluno inválido.</p>');
+    
+    // Buscar horários
+    $horarios = [];
+    $stmt = $conn->prepare("SELECT dia_semana FROM horarios_aulas WHERE ficha_id = ?");
+    $stmt->bind_param("i", $ficha_id);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    while ($h = $res->fetch_assoc()) $horarios[] = $h['dia_semana'];
+    
+    // Buscar aulas do mês
+    $aulas_mes = [];
+    $stmt2 = $conn->prepare("
+        SELECT DATE(data_hora) as data, status 
+        FROM agendamentos_aulas 
+        WHERE aluno_id = (SELECT id FROM fichas WHERE id = ? LIMIT 1) 
+        AND MONTH(data_hora) = ? AND YEAR(data_hora) = ?
+    ");
+    $stmt2->bind_param("iii", $ficha_id, $mes, $ano);
+    $stmt2->execute();
+    $res2 = $stmt2->get_result();
+    while ($a = $res2->fetch_assoc()) $aulas_mes[$a['data']] = $a['status'];
+    
+    // Gerar HTML do calendário
+    $primeiro_dia = mktime(0,0,0,$mes,1,$ano);
+    $dias_no_mes = date('t', $primeiro_dia);
+    $dia_semana_inicio = date('w', $primeiro_dia);
+    $dias_semana_port = ['domingo','segunda','terca','quarta','quinta','sexta','sabado'];
+    $html = '<div class="calendario-container"><div class="calendario-dias-semana"><span>D</span><span>S</span><span>T</span><span>Q</span><span>Q</span><span>S</span><span>S</span></div><div class="calendario-grid">';
+    for ($i=0;$i<$dia_semana_inicio;$i++) $html .= '<div class="calendario-dia vazio"></div>';
+    for ($dia=1;$dia<=$dias_no_mes;$dia++) {
+        $data = sprintf("%04d-%02d-%02d",$ano,$mes,$dia);
+        $timestamp = mktime(0,0,0,$mes,$dia,$ano);
+        $dia_semana = $dias_semana_port[date('w',$timestamp)];
+        $tem_aula = in_array($dia_semana, $horarios);
+        $aula = $aulas_mes[$data] ?? null;
+        $classes = ['calendario-dia'];
+        if ($tem_aula) $classes[] = 'dia-aula';
+        if ($aula) {
+            if ($aula == 'realizado') $classes[] = 'aula-realizada';
+            elseif ($aula == 'cancelado_aluno') $classes[] = 'aula-cancelada-aluno';
+            elseif ($aula == 'cancelado_professor') $classes[] = 'aula-cancelada-professor';
+        }
+        $html .= "<div class='".implode(' ',$classes)."'>".$dia;
+        if ($aula) $html .= "<span class='icone-status'>".($aula=='realizado'?'✓':'✗')."</span>";
+        $html .= "</div>";
+    }
+    $html .= '</div></div>';
+    echo $html;
+    exit;
+}
 ?>
-
 <!DOCTYPE html>
 <html lang="pt">
 <head>
-<meta charset="UTF-8">
-<title>Painel do Administrador</title>
-<link rel="stylesheet" href="Css/admin.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-<style>
-.btn.excluir{background:#e74c3c;color:#fff;border:none;padding:5px 10px;margin-left:5px;cursor:pointer;border-radius:4px;font-size:0.9em;}
-.btn.excluir:hover{background:#c0392b;}
-.btn{background:#3498db;color:#fff;border:none;padding:5px 10px;cursor:pointer;border-radius:4px;}
-.btn:hover{background:#2980b9;}
-table{width:100%;border-collapse:collapse;font-size:0.9em;}
-th,td{border:1px solid #ddd;padding:8px;vertical-align:middle;}
-th{background:#f2f2f2;}
-section.section{display:none;}
-section.section.active{display:block;}
-.alert{padding:10px;background:#2ecc71;color:#fff;margin-bottom:10px;border-radius:4px;}
-.alert.erro{background:#e74c3c;}
-</style>
-<script>
-function mostrarSecao(secao){
-    document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
-    document.getElementById('boas_vindas').style.display='none';
-    if(secao==='usuarios') document.getElementById('secao_usuarios').classList.add('active');
-    else if(secao==='professores') document.getElementById('secao_professores').classList.add('active');
-}
-
-function excluirFicha(fichaId,botao){
-    if(!confirm("Deseja realmente excluir esta ficha?")) return;
-    const linha=botao.closest('tr');
-    fetch('excluir_ficha.php',{
-        method:'POST',
-        headers:{'Content-Type':'application/x-www-form-urlencoded'},
-        body:'ficha_id='+fichaId
-    }).then(res=>res.text()).then(res=>{
-        if(res.trim()==='ok') linha.innerHTML='<td colspan="21" style="text-align:center; color:red;">Ficha excluída<\/td>';
-        else alert('Erro ao excluir ficha: '+res);
-    }).catch(()=>alert('Erro ao excluir ficha.'));
-}
-</script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel Admin | WebTeaching</title>
+    <link rel="stylesheet" href="Css/admin.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .badge { background: #e74c3c; color: white; font-size: 0.7rem; padding: 2px 6px; border-radius: 30px; margin-left: 8px; }
+        .calendario-container { background: #f9fafb; border-radius: 16px; padding: 15px; margin-top: 15px; }
+        .calendario-dias-semana { display: grid; grid-template-columns: repeat(7,1fr); text-align: center; font-weight: bold; margin-bottom: 5px; }
+        .calendario-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 4px; }
+        .calendario-dia { background: white; border-radius: 8px; text-align: center; padding: 8px 0; font-size: 0.8rem; border: 1px solid #e2e8f0; position: relative; }
+        .calendario-dia.dia-aula { background: #e0f2fe; }
+        .calendario-dia.aula-realizada { background: #d1fae5; }
+        .calendario-dia.aula-cancelada-aluno { background: #fee2e2; }
+        .calendario-dia.aula-cancelada-professor { background: #ffedd5; }
+        .icone-status { position: absolute; bottom: 2px; right: 2px; font-size: 0.6rem; background: white; border-radius: 50%; width: 14px; height: 14px; display: flex; align-items: center; justify-content: center; }
+        .loading { text-align: center; padding: 20px; color: #666; }
+        .modal-conteudo { max-width: 750px; }
+        .info-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 12px; margin-bottom: 20px; }
+        .info-item strong { display: block; color: #2c3e50; margin-bottom: 4px; }
+        .info-item span { color: #5a6b7a; }
+    </style>
 </head>
 <body>
 
-<div class="header"><div><strong>WebTeaching</strong> - Reforço Cambridge</div><div class="top-user">Admin: <?=htmlspecialchars($_SESSION['usuario_nome']??'Administrador')?> 👤</div></div>
-<div class="sidebar">
-<h3>MENU DO ADMIN</h3>
-<ul>
-<li><a href="#" onclick="mostrarSecao('usuarios');return false;">Gestão de Usuários</a></li>
-<li><a href="#" onclick="mostrarSecao('professores');return false;">Gestão de Professores</a></li>
-<li><a href="logout.php">Sair</a></li>
-</ul>
+<button class="menu-toggle" id="menuToggle"><i class="fas fa-bars"></i></button>
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+<aside class="sidebar" id="sidebar">
+    <button class="menu-close" id="menuClose"><i class="fas fa-times"></i></button>
+    <h2>Menu Admin</h2>
+    <ul>
+        <li><a href="#" onclick="mostrarSecao('inicio', event)"><i class="fas fa-tachometer-alt"></i> Início</a></li>
+        <li><a href="#" onclick="mostrarSecao('solicitacoes', event)"><i class="fas fa-check-circle"></i> Solicitações <?= $total_pendentes > 0 ? "<span class='badge'>$total_pendentes</span>" : '' ?></a></li>
+        <li><a href="#" onclick="mostrarSecao('alunos_activos', event)"><i class="fas fa-users"></i> Alunos Activos</a></li>
+        <li><a href="#" onclick="mostrarSecao('professores', event)"><i class="fas fa-chalkboard-user"></i> Professores</a></li>
+        <li><a href="#" onclick="mostrarSecao('fichas_antigas', event)"><i class="fas fa-archive"></i> Fichas Antigas</a></li>
+        <li><a href="logout.php" class="logout-link"><i class="fas fa-sign-out-alt"></i> Sair</a></li>
+    </ul>
+</aside>
+
+<main class="content">
+    <!-- Início -->
+    <section id="inicio" class="dashboard-section active">
+        <div class="welcome-card">
+            <div style="display: flex; justify-content: space-between;">
+                <h2><i class="fas fa-home"></i> Painel do Administrador</h2>
+                <div class="notificacoes-container">
+                    <button class="notificacoes-btn" onclick="toggleNotificacoes()">
+                        <i class="fas fa-bell"></i>
+                        <?php $notif_count = $conn->query("SELECT COUNT(*) as t FROM pedidos_explicadores WHERE status='pendente' AND data_submissao >= DATE_SUB(NOW(), INTERVAL 1 DAY)")->fetch_assoc()['t']; ?>
+                        <?php if ($notif_count): ?><span class="notificacoes-badge"><?= $notif_count ?></span><?php endif; ?>
+                    </button>
+                    <div class="notificacoes-dropdown" id="notificacoesDropdown">
+                        <div class="notificacoes-header">Notificações</div>
+                        <div class="notificacoes-lista" id="notifList"></div>
+                        <div class="dropdown-footer"><a href="#" onclick="marcarTodasLidas()">Marcar todas</a></div>
+                    </div>
+                </div>
+            </div>
+            <p>Bem-vindo, <?= htmlspecialchars($_SESSION['usuario_nome'] ?? 'Admin') ?>.</p>
+            <div class="stats-cards">
+                <div class="stat-card"><div class="stat-number"><?= $total_pendentes ?></div><div class="stat-label">Solicitações</div></div>
+                <div class="stat-card"><div class="stat-number"><?= $total_activos ?></div><div class="stat-label">Alunos Activos</div></div>
+                <div class="stat-card"><div class="stat-number"><?= $total_professores ?></div><div class="stat-label">Professores</div></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Solicitações (apenas um botão "Detalhes") -->
+    <section id="solicitacoes" class="dashboard-section">
+        <h2><i class="fas fa-check-circle"></i> Solicitações (Pedidos Pendentes)</h2>
+        <?php if ($pendentes->num_rows == 0): ?>
+            <p>Nenhuma solicitação pendente.</p>
+        <?php else: ?>
+            <div class="table-responsive">
+                <table class="tabela-aulas">
+                    <thead><tr><th>Data</th><th>Nome</th><th>Email</th><th>Contacto</th><th>Nível</th><th>Pacote</th><th>Ações</th></tr></thead>
+                    <tbody>
+                        <?php while($p = $pendentes->fetch_assoc()): ?>
+                        <tr>
+                            <td><?= date('d/m/Y H:i', strtotime($p['data_submissao'])) ?></td>
+                            <td><?= htmlspecialchars($p['nome'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($p['email'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($p['contacto'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($p['nivel_cambridge'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($p['pacote'] ?? '') ?></td>
+                            <td>
+                                <button class="btn-sm btn-info" onclick="verDetalhesSolicitacao(<?= $p['id'] ?>)">Detalhes</button>
+                                <!-- Rejeitar via formulário directo -->
+                                <form method="POST" style="display:inline;" onsubmit="return confirm('Rejeitar este pedido?')">
+                                    <input type="hidden" name="excluir_pedido_id" value="<?= $p['id'] ?>">
+                                    <button class="btn-sm btn-danger">Rejeitar</button>
+                                </form>
+                            </td>
+                        </tr>
+                        <?php endwhile; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    </section>
+
+    <!-- Alunos Activos -->
+    <section id="alunos_activos" class="dashboard-section">
+        <h2><i class="fas fa-users"></i> Alunos Activos</h2>
+        <?php if ($alunos_activos->num_rows == 0): ?>
+            <p>Nenhum aluno activo ainda.</p>
+        <?php else: ?>
+            <div class="table-responsive">
+                <table class="tabela-aulas">
+                    <thead><tr><th>Nome</th><th>Email</th><th>Nível</th><th>Pacote</th><th>Professor</th><th>Status Pag.</th><th>Ações</th></tr></thead>
+                    <tbody>
+                        <?php while($a = $alunos_activos->fetch_assoc()): ?>
+                        <tr>
+                            <td><?= htmlspecialchars($a['nome'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($a['email'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($a['nivel_cambridge'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($a['pacote'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($a['professor_atribuido'] ?? '—') ?></td>
+                            <td><?= $a['pagamento_status'] == 'pago' ? 'Pago' : 'Pendente' ?></td>
+                            <td><button class="btn-sm btn-primary" onclick="verDetalhesAluno(<?= $a['ficha_id'] ?>)">Ver Detalhes</button></td>
+                        </tr>
+                        <?php endwhile; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    </section>
+
+    <!-- Professores (inalterado) -->
+    <section id="professores" class="dashboard-section">
+        <h2><i class="fas fa-chalkboard-user"></i> Gestão de Professores</h2>
+        <div class="dashboard-card">
+            <h3>Adicionar Professor</h3>
+            <form method="POST" class="inline-form">
+                <input type="hidden" name="acao_professor" value="adicionar">
+                <input type="text" name="nome" placeholder="Nome" required>
+                <input type="email" name="email" placeholder="Email" required>
+                <input type="password" name="senha" placeholder="Senha" required>
+                <input type="text" name="especialidade" placeholder="Especialidade" required>
+                <input type="text" name="telefone" placeholder="Telefone" required>
+                <select name="disponivel"><option value="sim">Disponível</option><option value="nao">Indisponível</option></select>
+                <button type="submit" class="btn btn-primary">Adicionar</button>
+            </form>
+        </div>
+        <div class="dashboard-card">
+            <h3>Lista de Professores</h3>
+            <?php $prof_list = $conn->query("SELECT p.id, u.nome, u.email, p.especialidade, p.telefone, p.disponivel FROM professores p JOIN usuarios u ON u.id=p.usuario_id ORDER BY p.criado_em DESC"); ?>
+            <div class="table-responsive">
+                <table class="tabela-aulas">
+                    <thead><tr><th>Nome</th><th>Email</th><th>Especialidade</th><th>Disponível</th><th>Ações</th></tr></thead>
+                    <tbody>
+                        <?php while($prof = $prof_list->fetch_assoc()): ?>
+                        <tr>
+                            <td><?= htmlspecialchars($prof['nome'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($prof['email'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($prof['especialidade'] ?? '') ?></td>
+                            <td><?= $prof['disponivel'] == 'sim' ? 'Sim' : 'Não' ?></td>
+                            <td>
+                                <form method="POST" style="display:inline;">
+                                    <input type="hidden" name="acao_professor" value="excluir">
+                                    <input type="hidden" name="professor_id" value="<?= $prof['id'] ?>">
+                                    <button class="btn-sm btn-danger" onclick="return confirm('Excluir este professor?')">Excluir</button>
+                                </form>
+                            </td>
+                        </tr>
+                        <?php endwhile; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- Fichas Antigas -->
+    <section id="fichas_antigas" class="dashboard-section">
+        <h2><i class="fas fa-archive"></i> Fichas Antigas (Sistema anterior)</h2>
+        <?php $fichas_ant = $conn->query("SELECT * FROM fichas ORDER BY data_submissao DESC LIMIT 50"); ?>
+        <div class="table-responsive">
+            <table class="tabela-aulas">
+                <thead><tr><th>Nome</th><th>Email</th><th>Classe</th><th>Data</th></tr></thead>
+                <tbody>
+                    <?php while($f = $fichas_ant->fetch_assoc()): ?>
+                    <tr>
+                        <td><?= htmlspecialchars($f['nome'] ?? '') ?></td>
+                        <td><?= htmlspecialchars($f['email'] ?? '') ?></td>
+                        <td><?= htmlspecialchars($f['classe'] ?? '') ?></td>
+                        <td><?= date('d/m/Y', strtotime($f['data_submissao'])) ?></td>
+                    </tr>
+                    <?php endwhile; ?>
+                </tbody>
+            </table>
+        </div>
+    </section>
+</main>
+
+<!-- ========== MODAL UNIFICADO: DETALHES + APROVAÇÃO ========== -->
+<div id="modalDetalhesSolicitacao" class="modal-overlay">
+    <div class="modal-conteudo">
+        <div class="modal-header">
+            <h2><i class="fas fa-clipboard-list"></i> Detalhes da Solicitação</h2>
+            <button class="modal-close" onclick="fecharModal('modalDetalhesSolicitacao')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="detalhesSolicitacaoBody">
+                <div class="loading">Carregando informações...</div>
+            </div>
+            <!-- Área para selecionar professor e aprovar -->
+            <div class="form-group" style="margin-top: 25px; border-top: 1px solid #eef2f6; padding-top: 20px;">
+                <label for="selectProfessorSolicitacao"><strong>Atribuir Professor:</strong></label>
+                <select id="selectProfessorSolicitacao" class="form-control">
+                    <option value="">-- Selecione um professor --</option>
+                    <?php 
+                    $prof_opts = $conn->query("SELECT p.id, u.nome FROM professores p JOIN usuarios u ON u.id=p.usuario_id WHERE p.disponivel='sim' ORDER BY u.nome");
+                    while($opt = $prof_opts->fetch_assoc()):
+                    ?>
+                        <option value="<?= $opt['id'] ?>"><?= htmlspecialchars($opt['nome']) ?></option>
+                    <?php endwhile; ?>
+                </select>
+            </div>
+        </div>
+        <div class="modal-footer" style="padding: 15px; border-top: 1px solid #eef2f6; text-align: right;">
+            <button class="btn btn-secondary" onclick="fecharModal('modalDetalhesSolicitacao')">Cancelar</button>
+            <button class="btn btn-success" onclick="aprovarSolicitacao()">✅ Aprovar e Criar Utilizador</button>
+        </div>
+    </div>
 </div>
 
-<div class="main">
-<div id="boas_vindas" class="boas-vindas section active">
-<h2>Bem-vindo ao Painel do Administrador</h2>
-<p>Use o menu à esquerda para navegar entre as opções.</p>
+<!-- Modal para detalhes do aluno (calendário, etc.) -->
+<div id="modalDetalhesAluno" class="modal-overlay">
+    <div class="modal-conteudo" style="max-width: 800px;">
+        <div class="modal-header">
+            <h2>Detalhes do Aluno</h2>
+            <button class="modal-close" onclick="fecharModal('modalDetalhesAluno')">&times;</button>
+        </div>
+        <div class="modal-body" id="detalhesAlunoBody">
+            <div class="loading">Carregando...</div>
+        </div>
+    </div>
 </div>
-
-<!-- Seção Fichas -->
-<div id="secao_usuarios" class="section">
-<h2>Fichas Submetidas</h2>
-<?php if(!empty($mensagem)) echo '<div class="alert">'.htmlspecialchars($mensagem).'</div>'; ?>
-<table>
-<thead>
-<tr>
-<th>Nome</th><th>Idade</th><th>Classe</th><th>Sexo</th><th>Dificuldades</th>
-<th>Pacote</th><th>Província</th><th>Escola</th><th>Internet</th><th>Regime</th>
-<th>Professor</th><th>Aulas</th><th>Confirmado</th><th>Validade</th>
-<th>Restantes</th><th>Situação</th><th>Valor Pago</th><th>Data Pagamento</th>
-<th>Recibo</th><th>Validada?</th><th>Ação</th>
-</tr>
-</thead>
-<tbody>
-<?php while($row=$result->fetch_assoc()): ?>
-<tr>
-<form method="POST">
-<td><?=htmlspecialchars($row['nome'])?></td>
-<td><?=$row['idade']?></td>
-<td><?=htmlspecialchars($row['classe'])?></td>
-<td><?=htmlspecialchars($row['sexo'])?></td>
-<td><?=htmlspecialchars($row['dificuldade'])?></td>
-<td><?=htmlspecialchars($row['pacote'])?></td>
-<td><?=htmlspecialchars($row['provincia'])?></td>
-<td><?=htmlspecialchars($row['escola'])?></td>
-<td><?=$row['internet_casa']?'Sim':'Não'?></td>
-<td><?=$row['regime_presencial']?'Presencial ':''?><?=$row['regime_online']?'Online ':''?><?=$row['regime_hibrido']?'Híbrido ':''?></td>
-
-<td>
-<select name="professor" required>
-<option value="">-- Selecionar --</option>
-<?php
-$result_professores_combo->data_seek(0);
-while($prof = $result_professores_combo->fetch_assoc()):
-$selected = ($row['professor_atribuido']==$prof['nome'])?'selected':'';
-echo "<option value=\"".htmlspecialchars($prof['nome'])."\" $selected>".htmlspecialchars($prof['nome'])."</option>";
-endwhile;
-?>
-</select>
-</td>
-
-<td><textarea name="aulas_agendadas"><?=htmlspecialchars($row['aulas_agendadas'])?></textarea></td>
-
-<td>
-<select name="pacote_confirmado" required>
-<option value="Não" <?=$row['pacote_confirmado']=='Não'?'selected':''?>>Não</option>
-<option value="Sim" <?=$row['pacote_confirmado']=='Sim'?'selected':''?>>Sim</option>
-<option value="Pacote Bronze" <?=$row['pacote_confirmado']=='Pacote Bronze'?'selected':''?>>Pacote Bronze</option>
-<option value="Pacote Prata" <?=$row['pacote_confirmado']=='Pacote Prata'?'selected':''?>>Pacote Prata</option>
-<option value="Pacote Ouro" <?=$row['pacote_confirmado']=='Pacote Ouro'?'selected':''?>>Pacote Ouro</option>
-</select>
-</td>
-
-<td><input type="date" name="pacote_valido_ate" value="<?=!empty($row['pacote_valido_ate']) ? htmlspecialchars($row['pacote_valido_ate']) : ''?>"></td>
-<td><input type="number" name="aulas_restantes" value="<?= (int)$row['aulas_restantes'] ?>"></td>
-<td><?=$row['pagamento_status']==='pago'?'✅ Pago':'⏳ Pendente'?></td>
-<td><?=$row['valor_pago']?number_format($row['valor_pago'],2).' MT':'N/A'?></td>
-<td><?=$row['data_pagamento']?date("d/m/Y H:i",strtotime($row['data_pagamento'])):'—'?></td>
-<td><?php if(!empty($row['recibo_pdf'])): ?><a href="<?=htmlspecialchars($row['recibo_pdf'])?>" target="_blank">📄 Abrir</a><?php else: ?>—<?php endif;?></td>
-<td><input type="checkbox" name="ficha_validada" <?=$row['ficha_validada']?'checked':''?>></td>
-<td>
-<input type="hidden" name="ficha_id" value="<?=$row['id']?>">
-<input type="hidden" name="acao" value="salvar">
-<button class="btn" type="submit">Salvar</button>
-<button type="button" class="btn excluir" onclick="excluirFicha(<?=$row['id']?>,this)"><i class="fas fa-trash"></i> Excluir</button>
-</td>
-</form>
-</tr>
-<?php endwhile;?>
-</tbody>
-</table>
-</div>
-
-<!-- Seção Professores -->
-<div id="secao_professores" class="section">
-<h2>Gestão de Professores</h2>
-<?php if(!empty($mensagem_professor)) echo '<div class="alert '.(strpos($mensagem_professor,'Erro')!==false?'erro':'').'">'.htmlspecialchars($mensagem_professor).'</div>'; ?>
-
-<form method="POST" id="form_professor" style="margin-bottom:20px;">
-<h3 id="titulo_form_professor">Adicionar Professor</h3>
-<input type="hidden" name="acao_professor" value="adicionar" id="acao_form">
-<input type="hidden" name="professor_id" value="" id="professor_id_form">
-<input type="text" name="nome" placeholder="Nome" required id="nome_form">
-<input type="email" name="email" placeholder="Email" required id="email_form">
-<input type="password" name="senha" placeholder="Senha (deixe em branco para manter)" id="senha_form">
-<input type="text" name="especialidade" placeholder="Especialidade" required id="especialidade_form">
-<input type="text" name="telefone" placeholder="Telefone" required id="telefone_form">
-<select name="disponivel" required id="disponivel_form">
-<option value="sim">Sim</option>
-<option value="nao">Não</option>
-</select>
-<button type="submit" class="btn" id="btn_form_professor"><i class="fas fa-plus"></i> Adicionar Professor</button>
-</form>
-
-<table>
-<thead>
-<tr>
-<th>Nome</th><th>Email</th><th>Especialidade</th><th>Telefone</th><th>Disponível</th><th>Criado Em</th><th>Ações</th>
-</tr>
-</thead>
-<tbody>
-<?php while($row=$result_professores->fetch_assoc()): ?>
-<tr>
-<td><?=htmlspecialchars($row['nome'])?></td>
-<td><?=htmlspecialchars($row['email'])?></td>
-<td><?=htmlspecialchars($row['especialidade'])?></td>
-<td><?=htmlspecialchars($row['telefone'])?></td>
-<td><?=htmlspecialchars($row['disponivel'])?></td>
-<td><?=date("d/m/Y H:i",strtotime($row['criado_em']))?></td>
-<td>
-<button type="button" class="btn" onclick="editarProfessor(<?= $row['professor_id'] ?>,'<?= htmlspecialchars(addslashes($row['nome'])) ?>','<?= htmlspecialchars(addslashes($row['email'])) ?>','<?= htmlspecialchars(addslashes($row['especialidade'])) ?>','<?= htmlspecialchars(addslashes($row['telefone'])) ?>','<?= $row['disponivel'] ?>')">
-<i class="fas fa-pen"></i> Editar
-</button>
-<form method="POST" style="display:inline;">
-<input type="hidden" name="acao_professor" value="excluir">
-<input type="hidden" name="professor_id" value="<?=$row['professor_id']?>">
-<button type="submit" class="btn excluir"><i class="fas fa-trash"></i> Excluir</button>
-</form>
-</td>
-</tr>
-<?php endwhile;?>
-</tbody>
-</table>
 
 <script>
-function editarProfessor(id,nome,email,especialidade,telefone,disponivel){
-    document.getElementById('titulo_form_professor').innerText='Editar Professor';
-    document.getElementById('acao_form').value='editar';
-    document.getElementById('professor_id_form').value=id;
-    document.getElementById('nome_form').value=nome;
-    document.getElementById('email_form').value=email;
-    document.getElementById('senha_form').value='';
-    document.getElementById('especialidade_form').value=especialidade;
-    document.getElementById('telefone_form').value=telefone;
-    document.getElementById('disponivel_form').value=disponivel;
-    document.getElementById('btn_form_professor').innerHTML='<i class="fas fa-save"></i> Salvar Alterações';
-}
-</script>
-</div>
+// Variável para guardar o ID do pedido actual no modal
+let currentPedidoId = null;
 
-</div>
+function mostrarSecao(secao, event) {
+    if(event) event.preventDefault();
+    document.querySelectorAll('.dashboard-section').forEach(s => s.classList.remove('active'));
+    document.getElementById(secao).classList.add('active');
+    document.querySelectorAll('.sidebar ul li a').forEach(a => a.classList.remove('active'));
+    if(event) event.currentTarget.classList.add('active');
+}
+
+function fecharModal(modalId) {
+    document.getElementById(modalId).classList.remove('active');
+    currentPedidoId = null;
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/[&<>]/g, function(m) {
+        if (m === '&') return '&amp;';
+        if (m === '<') return '&lt;';
+        if (m === '>') return '&gt;';
+        return m;
+    });
+}
+
+// Função unificada: carrega detalhes do pedido e mostra o modal com dropdown
+function verDetalhesSolicitacao(pedidoId) {
+    currentPedidoId = pedidoId;
+    fetch(`detalhes_pedido.php?id=${pedidoId}`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.erro) {
+                alert(data.erro);
+                return;
+            }
+            let html = `
+                <div class="info-grid">
+                    <div class="info-item"><strong>Nome:</strong> <span>${escapeHtml(data.nome)}</span></div>
+                    <div class="info-item"><strong>Email:</strong> <span>${escapeHtml(data.email)}</span></div>
+                    <div class="info-item"><strong>Contacto:</strong> <span>${escapeHtml(data.contacto)}</span></div>
+                    <div class="info-item"><strong>Localização:</strong> <span>${escapeHtml(data.localizacao) || '—'}</span></div>
+                    <div class="info-item"><strong>Nível Cambridge:</strong> <span>${escapeHtml(data.nivel_cambridge)}</span></div>
+                    <div class="info-item"><strong>Tipo de aula:</strong> <span>${data.tipo_aula == 'presencial' ? 'Presencial' : 'Ao domicílio'}</span></div>
+                    <div class="info-item"><strong>Pacote:</strong> <span>${data.pacote}</span></div>
+                    <div class="info-item"><strong>Preço base:</strong> <span>${data.preco_base} MT</span></div>
+                    <div class="info-item"><strong>Total:</strong> <span>${data.preco_total} MT</span></div>
+                    <div class="info-item"><strong>Dias da semana:</strong> <span>${escapeHtml(data.dias_semana)}</span></div>
+                    <div class="info-item"><strong>Horário preferencial:</strong> <span>${escapeHtml(data.horario)}</span></div>
+                    <div class="info-item" style="grid-column: span 2;"><strong>Observações:</strong> <span>${escapeHtml(data.observacoes) || 'Nenhuma'}</span></div>
+                </div>
+            `;
+            document.getElementById('detalhesSolicitacaoBody').innerHTML = html;
+            document.getElementById('modalDetalhesSolicitacao').classList.add('active');
+        })
+        .catch(err => {
+            console.error(err);
+            alert('Erro ao carregar detalhes do pedido.');
+        });
+}
+
+function aprovarSolicitacao() {
+    if (!currentPedidoId) {
+        alert('Nenhum pedido selecionado.');
+        return;
+    }
+    const professorId = document.getElementById('selectProfessorSolicitacao').value;
+    if (!professorId) {
+        alert('Selecione um professor para atribuir ao aluno.');
+        return;
+    }
+    // Desabilitar botão enquanto processa
+    const btn = document.querySelector('#modalDetalhesSolicitacao .btn-success');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
+    btn.disabled = true;
+    
+    fetch('aprovar_pedido.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pedido_id: currentPedidoId, professor_id: professorId })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.sucesso) {
+            alert('✅ ' + data.mensagem);
+            location.reload(); // recarrega a página para actualizar listas
+        } else {
+            alert('❌ Erro: ' + data.mensagem);
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
+    })
+    .catch(err => {
+        alert('Erro na comunicação: ' + err);
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    });
+}
+
+// Detalhes do aluno (mantido)
+function verDetalhesAluno(fichaId) {
+    fetch(`dashboard_admin.php?ajax=aluno_detalhes&ficha_id=${fichaId}`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.erro) { alert(data.erro); return; }
+            const aluno = data.aluno;
+            let html = `<div style="display: grid; gap: 10px;"><p><strong>Nome:</strong> ${escapeHtml(aluno.nome)}</p><p><strong>Email:</strong> ${escapeHtml(aluno.email)}</p><p><strong>Contacto:</strong> ${escapeHtml(aluno.contacto) || '—'}</p><p><strong>Nível:</strong> ${escapeHtml(aluno.nivel_cambridge) || '—'}</p><p><strong>Pacote:</strong> ${escapeHtml(aluno.pacote)}</p><p><strong>Professor:</strong> ${escapeHtml(aluno.professor_atribuido) || 'Não atribuído'}</p><p><strong>Status Pagamento:</strong> ${aluno.pagamento_status}</p></div>`;
+            // Carregar calendário
+            fetch(`dashboard_admin.php?ajax=calendario_aluno&ficha_id=${fichaId}&mes=${data.mes}&ano=${data.ano}`)
+                .then(res => res.text())
+                .then(calHtml => {
+                    document.getElementById('detalhesAlunoBody').innerHTML = html + calHtml;
+                    document.getElementById('modalDetalhesAluno').classList.add('active');
+                })
+                .catch(() => {
+                    document.getElementById('detalhesAlunoBody').innerHTML = html + '<p>Erro ao carregar calendário</p>';
+                    document.getElementById('modalDetalhesAluno').classList.add('active');
+                });
+        })
+        .catch(() => alert('Erro ao carregar detalhes do aluno'));
+}
+
+// ========== NOTIFICAÇÕES ==========
+function toggleNotificacoes() {
+    const dropdown = document.getElementById('notificacoesDropdown');
+    dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+    carregarNotificacoes();
+}
+let ultimoIdNotif = 0;
+function carregarNotificacoes() {
+    fetch(`dashboard_admin.php?ajax=notificacoes&ultimo_id=${ultimoIdNotif}`)
+        .then(res => res.json())
+        .then(data => {
+            const lista = document.getElementById('notifList');
+            if (data.novas && data.novas.length) {
+                let html = '';
+                data.novas.forEach(n => {
+                    html += `<div class="notificacao-item nao-lida" data-id="${n.id}">
+                        <div class="notificacao-titulo">Novo pedido</div>
+                        <div class="notificacao-mensagem">${escapeHtml(n.nome)} submeteu uma solicitação.</div>
+                        <div class="notificacao-data">${new Date(n.data_submissao).toLocaleString()}</div>
+                    </div>`;
+                    if (n.id > ultimoIdNotif) ultimoIdNotif = n.id;
+                });
+                lista.innerHTML = html + lista.innerHTML;
+                const badge = document.querySelector('.notificacoes-badge');
+                if (badge) badge.innerText = (parseInt(badge.innerText) || 0) + data.novas.length;
+            }
+        })
+        .catch(console.warn);
+}
+function marcarTodasLidas() {
+    const badge = document.querySelector('.notificacoes-badge');
+    if (badge) badge.style.display = 'none';
+    document.getElementById('notifList').innerHTML = '<div class="notificacao-item">Nenhuma notificação nova</div>';
+    document.getElementById('notificacoesDropdown').style.display = 'none';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    mostrarSecao('inicio', null);
+    setInterval(carregarNotificacoes, 30000);
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.notificacoes-container')) document.getElementById('notificacoesDropdown').style.display = 'none';
+    });
+});
+</script>
 </body>
 </html>
+<?php $conn->close(); ?>

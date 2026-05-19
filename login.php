@@ -113,7 +113,7 @@ unset($_SESSION['erro_login'], $_SESSION['email_temp']);
                 <!-- MENU DESKTOP (APENAS DESKTOP) -->
                 <nav class="desktop-nav">
                     <ul class="nav-links">
-                        <li><a href="servicos.html"><?php echo $t['servicos']; ?></a></li>
+                        <li><a href="servicos.php"><?php echo $t['servicos']; ?></a></li>
                         <li><a href="sobreNos.html"><?php echo $t['sobre_nos']; ?></a></li>
                         <li><a href="Login.php" class="active"><?php echo $t['login']; ?></a></li>
                         <li><a href="Sign-in.php" class="btn-register"><?php echo $t['registro']; ?></a></li>
@@ -140,7 +140,7 @@ unset($_SESSION['erro_login'], $_SESSION['email_temp']);
             
             <nav class="mobile-nav">
                 <ul>
-                    <li><a href="servicos.php"><?php echo $t['servicos']; ?></a></li>
+                    <li><a href="Servicos.php"><?php echo $t['servicos']; ?></a></li>
                     <li><a href="sobreNos.php"><?php echo $t['sobre_nos']; ?></a></li>
                     <li><a href="Login.php" class="active"><?php echo $t['login']; ?></a></li>
                     <li><a href="Sign-in.php" class="btn-register"><?php echo $t['registro']; ?></a></li>

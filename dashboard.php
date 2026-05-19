@@ -333,8 +333,8 @@ $valor_mensal = $row['valor_mensal'] ?? $valor_pacote;
         <li><a href="#" onclick="mostrarSecao('boas_vindas', event)" id="link-boas-vindas">
             <i class="fas fa-home"></i> Início
         </a></li>
-        <li><a href="#" onclick="mostrarSecao('ficha', event)" id="link-ficha">
-            <i class="fas fa-file-alt"></i> Encontrar Professor
+        <li><a href="#" onclick="mostrarSecao('recursos', event)" id="link-recursos">
+            <i class="fas fa-folder-open"></i> Os meus Recursos
         </a></li>
         <li><a href="#" onclick="mostrarSecao('aulas', event)" id="link-aulas" class="active">
             <i class="fas fa-chalkboard-teacher"></i> Minhas Aulas
@@ -450,89 +450,41 @@ $valor_mensal = $row['valor_mensal'] ?? $valor_pacote;
         </div>
     </section>
 
-    <!-- Minha Ficha -->
-    <section id="ficha" class="dashboard-section hidden">
+    <!-- OS MEUS RECURSOS (nova secção) -->
+    <section id="recursos" class="dashboard-section hidden">
+        <h2 class="section-title"><i class="fas fa-folder-open"></i> Os meus Recursos</h2>
         
-        <p>Permita-nos conhecer as tuas dificuldades para te oferecer um professor ideal</p>
-
-        <?php if (isset($_GET['status']) && $_GET['status'] === 'success'): ?>
-            <div class="alert alert-success">✅ Ficha atualizada com sucesso!</div>
-        <?php endif; ?>
-
-        <?php if ($row): ?>
-            <div class="dashboard-card">
-                <div class="info-grid">
-                    <div class="info-item">
-                        <span class="info-label">Nome:</span>
-                        <span class="info-value"><?= htmlspecialchars($row['nome']) ?></span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label">Idade:</span>
-                        <span class="info-value"><?= $row['idade'] ?> anos</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label">Classe:</span>
-                        <span class="info-value"><?= htmlspecialchars($row['classe']) ?></span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label">Sexo:</span>
-                        <span class="info-value"><?= $row['sexo'] === 'm' ? 'Masculino' : 'Feminino' ?></span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label">Localização:</span>
-                        <span class="info-value"><?= htmlspecialchars($row['localizacao']) ?></span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label">Contacto:</span>
-                        <span class="info-value"><?= htmlspecialchars($row['contacto_encarregado'] ?? $row['contacto'] ?? '') ?></span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label">Escola:</span>
-                        <span class="info-value"><?= htmlspecialchars($row['escola']) ?></span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label">Nível:</span>
-                        <span class="info-value"><?= $row['nivel'] ?? 'Não definido' ?></span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label">Pacote:</span>
-                        <span class="info-value"><?= $row['pacote'] ?? 'Não definido' ?></span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label">Fins de Semana:</span>
-                        <span class="info-value"><?= ($row['permite_finsemana'] ?? 0) ? 'Sim' : 'Não' ?></span>
-                    </div>
-                    <div class="info-item full-width">
-                        <span class="info-label">Dificuldades:</span>
-                        <span class="info-value"><?= htmlspecialchars($row['dificuldade']) ?></span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label">Província:</span>
-                        <span class="info-value"><?= htmlspecialchars($row['provincia']) ?></span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label">Internet:</span>
-                        <span class="info-value"><?= $row['internet_casa'] ? 'Sim' : 'Não' ?></span>
-                    </div>
-                </div>
-                <div style="margin-top: 20px;">
-                    <a href="editar_ficha.php?id=<?= $row['id'] ?>" class="btn btn-primary">
-                        <i class="fas fa-edit"></i> Editar Ficha
-                    </a>
-                </div>
+        <div class="dashboard-card">
+            <p>Aqui poderá aceder aos materiais de estudo partilhados pelo professor e submeter os seus próprios testes de autoavaliação.</p>
+            <hr style="margin: 20px 0;">
+            
+            <h3><i class="fas fa-download"></i> Recursos do Professor</h3>
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i> Em breve serão disponibilizados ficheiros, links e exercícios pelo seu professor.
             </div>
-        <?php else: ?>
-            <div class="dashboard-card">
-                <p class="text-muted">Nenhuma ficha encontrada.</p>
-                <a href="FichaAluno.html" class="btn btn-primary">
-                    <i class="fas fa-plus-circle"></i> Preencher Agora
-                </a>
-            </div>
-        <?php endif; ?>
+            
+            <h3><i class="fas fa-upload"></i> Submeter Teste de Avaliação</h3>
+            <form action="submeter_teste.php" method="POST" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label>Título do Teste</label>
+                    <input type="text" name="titulo" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label>Ficheiro (PDF, DOC, IMAGEM)</label>
+                    <input type="file" name="ficheiro" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label>Comentários (opcional)</label>
+                    <textarea name="comentarios" rows="3" class="form-control"></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">Enviar Teste</button>
+            </form>
+        </div>
     </section>
 
     <!-- MINHAS AULAS - APENAS CALENDÁRIO (visível apenas se pagou) -->
     <section id="aulas" class="dashboard-section <?= $pagamento_status !== 'pago' ? 'hidden' : '' ?>">
+        <!-- ... todo o conteúdo original da secção "aulas" permanece inalterado ... -->
         <div class="tabela-aulas-wrapper">
             <div class="tabela-header">
                 <h3><i class="fas fa-chalkboard-teacher"></i> Minhas Aulas</h3>
@@ -573,7 +525,7 @@ $valor_mensal = $row['valor_mensal'] ?? $valor_pacote;
                 </div>
             </div>
             
-            <!-- CARD DO CALENDÁRIO -->
+            <!-- CARD DO CALENDÁRIO (mantido igual ao original) -->
             <div style="padding: 20px; display: flex; justify-content: center;">
                 <div class="calendario-card">
                     <!-- Cabeçalho do card -->
@@ -624,7 +576,7 @@ $valor_mensal = $row['valor_mensal'] ?? $valor_pacote;
                         </a>
                     </div>
                     
-                    <!-- CALENDÁRIO -->
+                    <!-- CALENDÁRIO (mantido na íntegra) -->
                     <div class="calendario-container">
                         <div class="calendario-dias-semana">
                             <span>D</span><span>S</span><span>T</span><span>Q</span><span>Q</span><span>S</span><span>S</span>
@@ -632,7 +584,7 @@ $valor_mensal = $row['valor_mensal'] ?? $valor_pacote;
                         
                         <div class="calendario-grid" id="calendario-aulas">
                             <?php
-                            // Dados para o calendário
+                            // Dados para o calendário (igual ao original)
                             $primeiro_dia = mktime(0, 0, 0, $mes_exibicao, 1, $ano_exibicao);
                             $dias_no_mes = date('t', $primeiro_dia);
                             $dia_semana_inicio = date('w', $primeiro_dia);
@@ -793,6 +745,7 @@ $valor_mensal = $row['valor_mensal'] ?? $valor_pacote;
 
     <!-- Situação Financeira -->
     <section id="financeiro" class="dashboard-section">
+        <!-- ... todo o conteúdo original da secção "financeiro" permanece inalterado ... -->
         <h2><i class="fas fa-money-bill-wave"></i> Situação Financeira</h2>
         
         <?php if ($row): ?>
@@ -1028,7 +981,7 @@ $valor_mensal = $row['valor_mensal'] ?? $valor_pacote;
     </div>
 </div>
 
-<!-- CSS adicional para o calendário e notificações -->
+<!-- CSS adicional para o calendário e notificações (mantido igual ao original) -->
 <style>
 /* ===== ESTILOS DO CALENDÁRIO ===== */
 .calendario-navegacao {
