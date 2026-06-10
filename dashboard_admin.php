@@ -1,5 +1,5 @@
 <?php
-// dashboard_admin.php - Painel Administrativo (modal unificado)
+// dashboard_admin.php - Painel Administrativo (com exclusão de aluno)
 session_start();
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
@@ -51,6 +51,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['acao_professor'])) {
             $conn->query("DELETE FROM usuarios WHERE id = {$row['usuario_id']}");
             $mensagem_prof = "Professor excluído.";
         }
+    }
+}
+
+// ========== PROCESSAR EXCLUSÃO DE ALUNO (COMPLETO) ==========
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['acao_excluir_aluno'])) {
+    $ficha_id = (int)$_POST['ficha_id'];
+    $usuario_id = (int)$_POST['usuario_id'];
+    
+    if ($ficha_id && $usuario_id) {
+        // Iniciar transação
+        $conn->begin_transaction();
+        try {
+            // Remover itens relacionados (aulas, horários, notificações, etc.)
+            $conn->query("DELETE FROM agendamentos_aulas WHERE aluno_id = $ficha_id");
+            $conn->query("DELETE FROM horarios_aulas WHERE ficha_id = $ficha_id");
+            $conn->query("DELETE FROM notificacoes WHERE usuario_id = $usuario_id");
+            $conn->query("DELETE FROM pagamentos WHERE ficha_id = $ficha_id");
+            $conn->query("DELETE FROM password_resets WHERE email = (SELECT email FROM usuarios WHERE id = $usuario_id)");
+            // Remover ficha
+            $conn->query("DELETE FROM fichas WHERE id = $ficha_id");
+            // Remover utilizador
+            $conn->query("DELETE FROM usuarios WHERE id = $usuario_id");
+            $conn->commit();
+            $mensagem_aluno = "Aluno excluído completamente.";
+        } catch (Exception $e) {
+            $conn->rollback();
+            $mensagem_aluno = "Erro ao excluir aluno: " . $e->getMessage();
+        }
+    } else {
+        $mensagem_aluno = "Dados inválidos para exclusão.";
     }
 }
 
@@ -229,11 +259,11 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'calendario_aluno') {
     <button class="menu-close" id="menuClose"><i class="fas fa-times"></i></button>
     <h2>Menu Admin</h2>
     <ul>
-        <li><a href="#" onclick="mostrarSecao('inicio', event)"><i class="fas fa-tachometer-alt"></i> Início</a></li>
-        <li><a href="#" onclick="mostrarSecao('solicitacoes', event)"><i class="fas fa-check-circle"></i> Solicitações <?= $total_pendentes > 0 ? "<span class='badge'>$total_pendentes</span>" : '' ?></a></li>
-        <li><a href="#" onclick="mostrarSecao('alunos_activos', event)"><i class="fas fa-users"></i> Alunos Activos</a></li>
-        <li><a href="#" onclick="mostrarSecao('professores', event)"><i class="fas fa-chalkboard-user"></i> Professores</a></li>
-        <li><a href="#" onclick="mostrarSecao('fichas_antigas', event)"><i class="fas fa-archive"></i> Fichas Antigas</a></li>
+        <li><a href="#" data-secao="inicio"><i class="fas fa-tachometer-alt"></i> Início</a></li>
+        <li><a href="#" data-secao="solicitacoes"><i class="fas fa-check-circle"></i> Solicitações <?= $total_pendentes > 0 ? "<span class='badge'>$total_pendentes</span>" : '' ?></a></li>
+        <li><a href="#" data-secao="alunos_activos"><i class="fas fa-users"></i> Alunos Activos</a></li>
+        <li><a href="#" data-secao="professores"><i class="fas fa-chalkboard-user"></i> Professores</a></li>
+        <li><a href="#" data-secao="fichas_antigas"><i class="fas fa-archive"></i> Fichas Antigas</a></li>
         <li><a href="logout.php" class="logout-link"><i class="fas fa-sign-out-alt"></i> Sair</a></li>
     </ul>
 </aside>
@@ -266,7 +296,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'calendario_aluno') {
         </div>
     </section>
 
-    <!-- Solicitações (apenas um botão "Detalhes") -->
+    <!-- Solicitações (Pedidos Pendentes) -->
     <section id="solicitacoes" class="dashboard-section">
         <h2><i class="fas fa-check-circle"></i> Solicitações (Pedidos Pendentes)</h2>
         <?php if ($pendentes->num_rows == 0): ?>
@@ -286,7 +316,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'calendario_aluno') {
                             <td><?= htmlspecialchars($p['pacote'] ?? '') ?></td>
                             <td>
                                 <button class="btn-sm btn-info" onclick="verDetalhesSolicitacao(<?= $p['id'] ?>)">Detalhes</button>
-                                <!-- Rejeitar via formulário directo -->
                                 <form method="POST" style="display:inline;" onsubmit="return confirm('Rejeitar este pedido?')">
                                     <input type="hidden" name="excluir_pedido_id" value="<?= $p['id'] ?>">
                                     <button class="btn-sm btn-danger">Rejeitar</button>
@@ -300,15 +329,25 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'calendario_aluno') {
         <?php endif; ?>
     </section>
 
-    <!-- Alunos Activos -->
+    <!-- Alunos Activos (com botão Excluir) -->
     <section id="alunos_activos" class="dashboard-section">
         <h2><i class="fas fa-users"></i> Alunos Activos</h2>
         <?php if ($alunos_activos->num_rows == 0): ?>
             <p>Nenhum aluno activo ainda.</p>
         <?php else: ?>
             <div class="table-responsive">
-                <table class="tabela-aulas">
-                    <thead><tr><th>Nome</th><th>Email</th><th>Nível</th><th>Pacote</th><th>Professor</th><th>Status Pag.</th><th>Ações</th></tr></thead>
+                <table class="tabela-aulas" id="tabela-alunos">
+                    <thead>
+                        <tr>
+                            <th>Nome</th>
+                            <th>Email</th>
+                            <th>Nível</th>
+                            <th>Pacote</th>
+                            <th>Professor</th>
+                            <th>Status Pag.</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
                     <tbody>
                         <?php while($a = $alunos_activos->fetch_assoc()): ?>
                         <tr>
@@ -318,7 +357,10 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'calendario_aluno') {
                             <td><?= htmlspecialchars($a['pacote'] ?? '') ?></td>
                             <td><?= htmlspecialchars($a['professor_atribuido'] ?? '—') ?></td>
                             <td><?= $a['pagamento_status'] == 'pago' ? 'Pago' : 'Pendente' ?></td>
-                            <td><button class="btn-sm btn-primary" onclick="verDetalhesAluno(<?= $a['ficha_id'] ?>)">Ver Detalhes</button></td>
+                            <td class="acoes">
+                                <button class="btn-sm btn-primary" onclick="verDetalhesAluno(<?= $a['ficha_id'] ?>)">Ver Detalhes</button>
+                                <button class="btn-sm btn-danger" onclick="excluirAluno(<?= $a['ficha_id'] ?>, <?= $a['usuario_id'] ?>, '<?= addslashes($a['nome']) ?>')">Excluir</button>
+                            </td>
                         </tr>
                         <?php endwhile; ?>
                     </tbody>
@@ -401,24 +443,20 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'calendario_aluno') {
             <button class="modal-close" onclick="fecharModal('modalDetalhesSolicitacao')">&times;</button>
         </div>
         <div class="modal-body">
-            <div id="detalhesSolicitacaoBody">
-                <div class="loading">Carregando informações...</div>
-            </div>
-            <!-- Área para selecionar professor e aprovar -->
+            <div id="detalhesSolicitacaoBody"><div class="loading">Carregando...</div></div>
             <div class="form-group" style="margin-top: 25px; border-top: 1px solid #eef2f6; padding-top: 20px;">
                 <label for="selectProfessorSolicitacao"><strong>Atribuir Professor:</strong></label>
                 <select id="selectProfessorSolicitacao" class="form-control">
                     <option value="">-- Selecione um professor --</option>
                     <?php 
                     $prof_opts = $conn->query("SELECT p.id, u.nome FROM professores p JOIN usuarios u ON u.id=p.usuario_id WHERE p.disponivel='sim' ORDER BY u.nome");
-                    while($opt = $prof_opts->fetch_assoc()):
-                    ?>
+                    while($opt = $prof_opts->fetch_assoc()): ?>
                         <option value="<?= $opt['id'] ?>"><?= htmlspecialchars($opt['nome']) ?></option>
                     <?php endwhile; ?>
                 </select>
             </div>
         </div>
-        <div class="modal-footer" style="padding: 15px; border-top: 1px solid #eef2f6; text-align: right;">
+        <div class="modal-footer">
             <button class="btn btn-secondary" onclick="fecharModal('modalDetalhesSolicitacao')">Cancelar</button>
             <button class="btn btn-success" onclick="aprovarSolicitacao()">✅ Aprovar e Criar Utilizador</button>
         </div>
@@ -432,29 +470,15 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'calendario_aluno') {
             <h2>Detalhes do Aluno</h2>
             <button class="modal-close" onclick="fecharModal('modalDetalhesAluno')">&times;</button>
         </div>
-        <div class="modal-body" id="detalhesAlunoBody">
-            <div class="loading">Carregando...</div>
-        </div>
+        <div class="modal-body" id="detalhesAlunoBody"><div class="loading">Carregando...</div></div>
     </div>
 </div>
 
 <script>
-// Variável para guardar o ID do pedido actual no modal
+// Variável global para o ID do pedido actual
 let currentPedidoId = null;
 
-function mostrarSecao(secao, event) {
-    if(event) event.preventDefault();
-    document.querySelectorAll('.dashboard-section').forEach(s => s.classList.remove('active'));
-    document.getElementById(secao).classList.add('active');
-    document.querySelectorAll('.sidebar ul li a').forEach(a => a.classList.remove('active'));
-    if(event) event.currentTarget.classList.add('active');
-}
-
-function fecharModal(modalId) {
-    document.getElementById(modalId).classList.remove('active');
-    currentPedidoId = null;
-}
-
+// Função auxiliar para escape HTML
 function escapeHtml(str) {
     if (!str) return '';
     return str.replace(/[&<>]/g, function(m) {
@@ -465,57 +489,62 @@ function escapeHtml(str) {
     });
 }
 
-// Função unificada: carrega detalhes do pedido e mostra o modal com dropdown
+function formatarData(dataStr) {
+    const d = new Date(dataStr);
+    return d.toLocaleDateString('pt-PT') + ' ' + d.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
+}
+
+// Navegação por secções (data-secao)
+document.querySelectorAll('.sidebar ul li a[data-secao]').forEach(link => {
+    link.addEventListener('click', function(e) {
+        e.preventDefault();
+        const secao = this.getAttribute('data-secao');
+        document.querySelectorAll('.dashboard-section').forEach(s => s.classList.remove('active'));
+        document.getElementById(secao).classList.add('active');
+        document.querySelectorAll('.sidebar ul li a').forEach(a => a.classList.remove('active'));
+        this.classList.add('active');
+    });
+});
+
+// Inicializar secção activa
+document.querySelector('.sidebar ul li a[data-secao="inicio"]').classList.add('active');
+
+// ========== DETALHES SOLICITAÇÃO ==========
 function verDetalhesSolicitacao(pedidoId) {
     currentPedidoId = pedidoId;
     fetch(`detalhes_pedido.php?id=${pedidoId}`)
         .then(res => res.json())
         .then(data => {
-            if (data.erro) {
-                alert(data.erro);
-                return;
-            }
+            if (data.erro) throw new Error(data.erro);
             let html = `
                 <div class="info-grid">
                     <div class="info-item"><strong>Nome:</strong> <span>${escapeHtml(data.nome)}</span></div>
                     <div class="info-item"><strong>Email:</strong> <span>${escapeHtml(data.email)}</span></div>
                     <div class="info-item"><strong>Contacto:</strong> <span>${escapeHtml(data.contacto)}</span></div>
                     <div class="info-item"><strong>Localização:</strong> <span>${escapeHtml(data.localizacao) || '—'}</span></div>
-                    <div class="info-item"><strong>Nível Cambridge:</strong> <span>${escapeHtml(data.nivel_cambridge)}</span></div>
-                    <div class="info-item"><strong>Tipo de aula:</strong> <span>${data.tipo_aula == 'presencial' ? 'Presencial' : 'Ao domicílio'}</span></div>
+                    <div class="info-item"><strong>Nível:</strong> <span>${escapeHtml(data.nivel_cambridge)}</span></div>
+                    <div class="info-item"><strong>Tipo aula:</strong> <span>${data.tipo_aula === 'presencial' ? 'Presencial' : 'Ao domicílio'}</span></div>
                     <div class="info-item"><strong>Pacote:</strong> <span>${data.pacote}</span></div>
-                    <div class="info-item"><strong>Preço base:</strong> <span>${data.preco_base} MT</span></div>
                     <div class="info-item"><strong>Total:</strong> <span>${data.preco_total} MT</span></div>
-                    <div class="info-item"><strong>Dias da semana:</strong> <span>${escapeHtml(data.dias_semana)}</span></div>
-                    <div class="info-item"><strong>Horário preferencial:</strong> <span>${escapeHtml(data.horario)}</span></div>
-                    <div class="info-item" style="grid-column: span 2;"><strong>Observações:</strong> <span>${escapeHtml(data.observacoes) || 'Nenhuma'}</span></div>
+                    <div class="info-item"><strong>Dias:</strong> <span>${escapeHtml(data.dias_semana)}</span></div>
+                    <div class="info-item"><strong>Horário:</strong> <span>${escapeHtml(data.horario)}</span></div>
+                    <div class="info-item" style="grid-column:span 2"><strong>Observações:</strong> <span>${escapeHtml(data.observacoes) || '—'}</span></div>
                 </div>
             `;
             document.getElementById('detalhesSolicitacaoBody').innerHTML = html;
             document.getElementById('modalDetalhesSolicitacao').classList.add('active');
         })
-        .catch(err => {
-            console.error(err);
-            alert('Erro ao carregar detalhes do pedido.');
-        });
+        .catch(err => alert('Erro: ' + err.message));
 }
 
 function aprovarSolicitacao() {
-    if (!currentPedidoId) {
-        alert('Nenhum pedido selecionado.');
-        return;
-    }
+    if (!currentPedidoId) { alert('Nenhum pedido selecionado.'); return; }
     const professorId = document.getElementById('selectProfessorSolicitacao').value;
-    if (!professorId) {
-        alert('Selecione um professor para atribuir ao aluno.');
-        return;
-    }
-    // Desabilitar botão enquanto processa
+    if (!professorId) { alert('Selecione um professor.'); return; }
     const btn = document.querySelector('#modalDetalhesSolicitacao .btn-success');
-    const originalText = btn.innerHTML;
+    const original = btn.innerHTML;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
     btn.disabled = true;
-    
     fetch('aprovar_pedido.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -525,48 +554,83 @@ function aprovarSolicitacao() {
     .then(data => {
         if (data.sucesso) {
             alert('✅ ' + data.mensagem);
-            location.reload(); // recarrega a página para actualizar listas
+            location.reload();
         } else {
             alert('❌ Erro: ' + data.mensagem);
-            btn.innerHTML = originalText;
+            btn.innerHTML = original;
             btn.disabled = false;
         }
     })
-    .catch(err => {
-        alert('Erro na comunicação: ' + err);
-        btn.innerHTML = originalText;
-        btn.disabled = false;
-    });
+    .catch(err => { alert('Erro: ' + err); btn.innerHTML = original; btn.disabled = false; });
 }
 
-// Detalhes do aluno (mantido)
+// ========== DETALHES DO ALUNO (com calendário) ==========
 function verDetalhesAluno(fichaId) {
-    fetch(`dashboard_admin.php?ajax=aluno_detalhes&ficha_id=${fichaId}`)
+    const modal = document.getElementById('modalDetalhesAluno');
+    const body = document.getElementById('detalhesAlunoBody');
+    body.innerHTML = '<div class="loading">Carregando dados...</div>';
+    modal.classList.add('active');
+    const mes = new Date().getMonth() + 1;
+    const ano = new Date().getFullYear();
+    fetch(`dashboard_admin.php?ajax=aluno_detalhes&ficha_id=${fichaId}&mes=${mes}&ano=${ano}`)
         .then(res => res.json())
         .then(data => {
-            if (data.erro) { alert(data.erro); return; }
+            if (data.erro) throw new Error(data.erro);
             const aluno = data.aluno;
-            let html = `<div style="display: grid; gap: 10px;"><p><strong>Nome:</strong> ${escapeHtml(aluno.nome)}</p><p><strong>Email:</strong> ${escapeHtml(aluno.email)}</p><p><strong>Contacto:</strong> ${escapeHtml(aluno.contacto) || '—'}</p><p><strong>Nível:</strong> ${escapeHtml(aluno.nivel_cambridge) || '—'}</p><p><strong>Pacote:</strong> ${escapeHtml(aluno.pacote)}</p><p><strong>Professor:</strong> ${escapeHtml(aluno.professor_atribuido) || 'Não atribuído'}</p><p><strong>Status Pagamento:</strong> ${aluno.pagamento_status}</p></div>`;
-            // Carregar calendário
+            let html = `
+                <div class="info-grid">
+                    <div><strong>Nome:</strong> ${escapeHtml(aluno.nome)}</div>
+                    <div><strong>Email:</strong> ${escapeHtml(aluno.email)}</div>
+                    <div><strong>Contacto:</strong> ${escapeHtml(aluno.contacto) || '—'}</div>
+                    <div><strong>Nível:</strong> ${escapeHtml(aluno.nivel_cambridge) || '—'}</div>
+                    <div><strong>Pacote:</strong> ${aluno.pacote}</div>
+                    <div><strong>Professor:</strong> ${escapeHtml(aluno.professor_atribuido) || '—'}</div>
+                    <div><strong>Pagamento:</strong> ${aluno.pagamento_status === 'pago' ? '✅ Pago' : '⏳ Pendente'}</div>
+                </div>
+                <hr>
+                <h4>Calendário de Aulas</h4>
+                <div id="calendario-aluno-${fichaId}">Carregando calendário...</div>
+            `;
+            body.innerHTML = html;
+            // Carregar calendário via outro endpoint
             fetch(`dashboard_admin.php?ajax=calendario_aluno&ficha_id=${fichaId}&mes=${data.mes}&ano=${data.ano}`)
                 .then(res => res.text())
                 .then(calHtml => {
-                    document.getElementById('detalhesAlunoBody').innerHTML = html + calHtml;
-                    document.getElementById('modalDetalhesAluno').classList.add('active');
+                    document.getElementById(`calendario-aluno-${fichaId}`).innerHTML = calHtml;
                 })
-                .catch(() => {
-                    document.getElementById('detalhesAlunoBody').innerHTML = html + '<p>Erro ao carregar calendário</p>';
-                    document.getElementById('modalDetalhesAluno').classList.add('active');
-                });
+                .catch(() => document.getElementById(`calendario-aluno-${fichaId}`).innerHTML = '<p>Erro ao carregar calendário.</p>');
         })
-        .catch(() => alert('Erro ao carregar detalhes do aluno'));
+        .catch(err => { body.innerHTML = '<p class="erro">Erro: ' + err.message + '</p>'; });
+}
+
+function fecharModal(modalId) {
+    document.getElementById(modalId).classList.remove('active');
+}
+
+// ========== EXCLUIR ALUNO COMPLETO ==========
+function excluirAluno(fichaId, usuarioId, nome) {
+    if (!confirm(`Tem certeza que deseja excluir permanentemente o aluno "${nome}"?\n\nTodas as suas aulas, horários e dados serão removidos.`)) return;
+    fetch('dashboard_admin.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `acao_excluir_aluno=1&ficha_id=${fichaId}&usuario_id=${usuarioId}`
+    })
+    .then(res => res.text())
+    .then(data => {
+        if (data.includes('excluído completamente')) {
+            alert('✅ Aluno excluído com sucesso.');
+            location.reload();
+        } else {
+            alert('❌ Erro ao excluir aluno: ' + data);
+        }
+    })
+    .catch(err => alert('Erro: ' + err));
 }
 
 // ========== NOTIFICAÇÕES ==========
 function toggleNotificacoes() {
-    const dropdown = document.getElementById('notificacoesDropdown');
-    dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
-    carregarNotificacoes();
+    const dd = document.getElementById('notificacoesDropdown');
+    if (dd) dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
 }
 let ultimoIdNotif = 0;
 function carregarNotificacoes() {
@@ -574,36 +638,46 @@ function carregarNotificacoes() {
         .then(res => res.json())
         .then(data => {
             const lista = document.getElementById('notifList');
-            if (data.novas && data.novas.length) {
-                let html = '';
+            if (lista && data.novas && data.novas.length) {
+                let badge = document.querySelector('.notificacoes-badge');
+                let count = badge ? parseInt(badge.innerText) || 0 : 0;
                 data.novas.forEach(n => {
-                    html += `<div class="notificacao-item nao-lida" data-id="${n.id}">
-                        <div class="notificacao-titulo">Novo pedido</div>
-                        <div class="notificacao-mensagem">${escapeHtml(n.nome)} submeteu uma solicitação.</div>
-                        <div class="notificacao-data">${new Date(n.data_submissao).toLocaleString()}</div>
-                    </div>`;
+                    const item = document.createElement('div');
+                    item.className = 'notificacao-item nao-lida';
+                    item.innerHTML = `<div class="notificacao-titulo">Novo pedido</div><div class="notificacao-mensagem">${escapeHtml(n.nome)} submeteu uma solicitação.</div><div class="notificacao-data">${formatarData(n.data_submissao)}</div>`;
+                    lista.insertBefore(item, lista.firstChild);
                     if (n.id > ultimoIdNotif) ultimoIdNotif = n.id;
+                    count++;
                 });
-                lista.innerHTML = html + lista.innerHTML;
-                const badge = document.querySelector('.notificacoes-badge');
-                if (badge) badge.innerText = (parseInt(badge.innerText) || 0) + data.novas.length;
+                if (badge) badge.innerText = count;
+                const menuBadge = document.querySelector('.sidebar ul li a[data-secao="solicitacoes"] .badge');
+                if (menuBadge) menuBadge.innerText = count;
             }
         })
         .catch(console.warn);
 }
 function marcarTodasLidas() {
-    const badge = document.querySelector('.notificacoes-badge');
-    if (badge) badge.style.display = 'none';
-    document.getElementById('notifList').innerHTML = '<div class="notificacao-item">Nenhuma notificação nova</div>';
-    document.getElementById('notificacoesDropdown').style.display = 'none';
+    document.querySelector('.notificacoes-badge')?.style.display('none');
+    document.getElementById('notifList').innerHTML = '<div class="notificacao-vazia"><i class="fas fa-bell-slash"></i><p>Nenhuma notificação</p></div>';
+    const menuBadge = document.querySelector('.sidebar ul li a[data-secao="solicitacoes"] .badge');
+    if (menuBadge) menuBadge.innerText = '0';
 }
+setInterval(carregarNotificacoes, 30000);
+carregarNotificacoes();
 
-document.addEventListener('DOMContentLoaded', () => {
-    mostrarSecao('inicio', null);
-    setInterval(carregarNotificacoes, 30000);
-    document.addEventListener('click', (e) => {
-        if (!e.target.closest('.notificacoes-container')) document.getElementById('notificacoesDropdown').style.display = 'none';
-    });
+// Fechar dropdown ao clicar fora
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.notificacoes-container')) {
+        const dd = document.getElementById('notificacoesDropdown');
+        if (dd) dd.style.display = 'none';
+    }
+});
+
+// Fechar modais ao clicar no overlay
+window.addEventListener('click', function(e) {
+    if (e.target.classList && e.target.classList.contains('modal-overlay')) {
+        e.target.classList.remove('active');
+    }
 });
 </script>
 </body>

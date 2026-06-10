@@ -15,6 +15,8 @@ function abrirModal(modalId) {
         modal.classList.add('active');
         document.body.style.overflow = 'hidden';
         console.log('✅ Modal aberto:', modalId);
+    } else {
+        console.error('❌ Modal não encontrado:', modalId);
     }
 }
 
@@ -50,14 +52,13 @@ function mostrarSecao(id, event) {
     }
 }
 
-// ===== FUNÇÕES DO MENU MOBILE - EXATAMENTE IGUAL AO TESTE =====
+// ===== FUNÇÕES DO MENU MOBILE =====
 function abrirSidebar() {
     console.log('🔵 abrirSidebar chamada');
     
     const sidebar = document.getElementById('sidebar');
     const overlay = document.getElementById('sidebarOverlay');
     
-    // EXATAMENTE O MESMO CÓDIGO DO TESTE QUE FUNCIONOU
     sidebar.classList.add('active');
     overlay.classList.add('active');
     
@@ -114,15 +115,21 @@ function abrirModalDiaProfessor(elemento) {
     const dataAula = new Date(data);
     dataAula.setHours(0, 0, 0, 0);
     
-    // Extrair hora e minuto da aula
-    const [horaAula, minutoAula] = horario.split(':').map(Number);
-    const dataHoraAula = new Date(data);
-    dataHoraAula.setHours(horaAula || 0, minutoAula || 0, 0, 0);
-    
+    // Extrair hora e minuto da aula (apenas a hora de início, ex: "14h-15h30" -> "14:00")
+    let horaInicio = '00:00';
+    if (horario) {
+        const match = horario.match(/(\d{1,2})(?:h|:)/);
+        if (match) horaInicio = `${match[1].padStart(2, '0')}:00`;
+        else if (horario.match(/(\d{1,2}):(\d{2})/)) horaInicio = horario.substring(0, 5);
+    }
+    const dataHoraAula = new Date(data + 'T' + horaInicio);
     const agora = new Date();
     
     // Formatar data para exibição
     const dataFormatada = dataAula.toLocaleDateString('pt-PT');
+    const isFuturo = dataAula > hoje;
+    const isHoje = dataAula.getTime() === hoje.getTime();
+    const horarioPassou = isHoje && agora >= dataHoraAula;
     
     // 🔴 REGRA 1: Aula já realizada → mostrar detalhes
     if (status === 'realizado') {
@@ -156,30 +163,23 @@ function abrirModalDiaProfessor(elemento) {
         return;
     }
     
-    // 🔴 REGRAS DE NEGÓCIO PARA O PROFESSOR
-    
+    // ========== REGRAS DE NEGÓCIO PARA O PROFESSOR ==========
     // Se a aula já tem ID (existe no banco)
     if (aulaId) {
-        // CASO 1: Aula agendada → verificar se pode cancelar ou registrar
         if (status === 'agendado') {
             // Verificar se a data é futura
             if (dataAula > hoje) {
-                // Data futura → pode cancelar (ainda não chegou o dia)
                 console.log('📅 Data futura com aula agendada - Abrir cancelamento');
                 abrirModalCancelarAntecipado(aulaId, nomeAluno, `${dataFormatada} ${horario}`);
                 return;
             }
             
             // Verificar se é hoje
-            if (dataAula.getTime() === hoje.getTime()) {
-                const horarioPassou = agora >= dataHoraAula;
-                
+            if (isHoje) {
                 if (horarioPassou) {
-                    // JÁ PASSOU DO HORÁRIO → PODE REGISTRAR A AULA DADA
                     console.log('📅 Hoje, horário já passou - Abrir REGISTRO de aula');
                     abrirModalRegistro(alunoId, nomeAluno, data, horario);
                 } else {
-                    // AINDA NÃO CHEGOU O HORÁRIO → PODE CANCELAR
                     console.log('📅 Hoje, antes do horário - Abrir CANCELAMENTO');
                     abrirModalCancelarAntecipado(aulaId, nomeAluno, `${dataFormatada} ${horario}`);
                 }
@@ -189,22 +189,22 @@ function abrirModalDiaProfessor(elemento) {
             // Data passada com status agendado (aula que passou sem registro)
             if (dataAula < hoje) {
                 console.log('⚠️ Data passada com status agendado - PODE REGISTRAR ATRASADO');
-                // Permitir registro mesmo para dias passados (aula não registrada)
                 abrirModalRegistro(alunoId, nomeAluno, data, horario);
                 return;
             }
         }
         
-        // CASO 2: Outros status (pendente, etc.)
+        // Outros status (pendente, etc.)
         alert(`Status da aula: ${status}. Contacte o suporte se necessário.`);
         return;
     }
     
-    // Se NÃO tem ID, mas é dia de aula (aula prevista mas ainda não agendada no banco)
+    // ========== AULA PREVISTA MAS SEM ID (NÃO AGENDADA NO BANCO) ==========
     if (elemento.classList.contains('dia-aula') && !aulaId) {
-        // Data futura sem aula agendada (deveria ter, mas não tem)
+        // Data futura sem aula agendada → permite criar aula manualmente
         if (dataAula > hoje) {
-            alert('⚠️ Aula prevista mas sem agendamento. Contacte o suporte.');
+            console.log('📅 Data futura sem agendamento - Abrir REGISTRO');
+            abrirModalRegistro(alunoId, nomeAluno, data, horario);
             return;
         }
         
@@ -214,8 +214,14 @@ function abrirModalDiaProfessor(elemento) {
             return;
         }
         
-        // Hoje sem aula agendada (erro)
-        alert('⚠️ Aula prevista para hoje mas sem agendamento. Contacte o suporte.');
+        // Hoje sem aula agendada (dia de aula mas sem registo) → permite criar
+        if (isHoje) {
+            console.log('📅 Hoje, dia de aula sem agendamento - Abrir REGISTRO');
+            abrirModalRegistro(alunoId, nomeAluno, data, horario);
+            return;
+        }
+        
+        alert('⚠️ Situação não prevista. Contacte o suporte.');
         return;
     }
     
@@ -235,25 +241,38 @@ function abrirModalRegistro(fichaId, nomeAluno, dataEspecifica = null, horarioPa
     
     limparTodasDisciplinas();
     
-    document.getElementById('registro_ficha_id').value = fichaId;
-    document.getElementById('nome_aluno_registro').textContent = nomeAluno;
-    document.getElementById('horario_padrao_display').textContent = horarioPadrao || 'Não definido';
+    const registroFicha = document.getElementById('registro_ficha_id');
+    const nomeAlunoSpan = document.getElementById('nome_aluno_registro');
+    const horarioPadraoSpan = document.getElementById('horario_padrao_display');
+    const dataHoraDisplay = document.getElementById('data_hora_display');
+    const registroDataHora = document.getElementById('registro_data_hora');
+    const observacoesGerais = document.getElementById('observacoes_gerais');
+    
+    if (!registroFicha || !nomeAlunoSpan || !horarioPadraoSpan || !dataHoraDisplay || !registroDataHora) {
+        console.error('Elementos do modal de registro não encontrados');
+        alert('Erro ao abrir formulário de registo. Recarregue a página.');
+        return;
+    }
+    
+    registroFicha.value = fichaId;
+    nomeAlunoSpan.textContent = nomeAluno;
+    horarioPadraoSpan.textContent = horarioPadrao || 'Não definido';
     
     if (dataEspecifica) {
         const [ano, mes, dia] = dataEspecifica.split('-');
         const dataObj = new Date(ano, mes-1, dia);
         const dataFormatada = dataObj.toLocaleDateString('pt-PT');
-        document.getElementById('data_hora_display').textContent = dataFormatada + ' ' + (horarioPadrao || '--:--');
-        document.getElementById('registro_data_hora').value = dataEspecifica + ' ' + (horarioPadrao || '00:00') + ':00';
+        dataHoraDisplay.textContent = dataFormatada + ' ' + (horarioPadrao || '--:--');
+        registroDataHora.value = dataEspecifica + ' ' + (horarioPadrao || '00:00') + ':00';
     } else {
         const now = new Date();
         const data = now.toISOString().split('T')[0];
         const hora = now.toTimeString().substring(0, 5);
-        document.getElementById('data_hora_display').textContent = `${data.split('-').reverse().join('/')} ${hora}`;
-        document.getElementById('registro_data_hora').value = data + ' ' + hora + ':00';
+        dataHoraDisplay.textContent = `${data.split('-').reverse().join('/')} ${hora}`;
+        registroDataHora.value = data + ' ' + hora + ':00';
     }
     
-    document.getElementById('observacoes_gerais').value = '';
+    if (observacoesGerais) observacoesGerais.value = '';
     
     abrirModal('modalRegistro');
 }
@@ -635,7 +654,7 @@ function cancelarAula(aulaId, tipo = 'professor') {
     });
 }
 
-// ===== FUNÇÃO PARA ABRIR MODAL DE CANCELAMENTO ANTECIPADO =====
+// ===== FUNÇÃO PARA ABRIR MODAL DE CANCELAMENTO ANTECIPADO (CORRIGIDA E ROBUSTA) =====
 function abrirModalCancelarAntecipado(aulaId, alunoNome, dataHora) {
     console.log('Abrindo cancelamento antecipado:', { aulaId, alunoNome, dataHora });
     
@@ -650,45 +669,102 @@ function abrirModalCancelarAntecipado(aulaId, alunoNome, dataHora) {
         dataHora: dataHora
     };
     
-    // Verificar se o modal existe
-    if (!document.getElementById('modalCancelarAntecipado')) {
-        alert('Erro: Modal de cancelamento não encontrado. Recarregue a página.');
+    // Verificar se o modal existe no DOM. Se não existir, recriá‑lo dinamicamente.
+    let modal = document.getElementById('modalCancelarAntecipado');
+    if (!modal) {
+        console.warn('Modal de cancelamento não encontrado. A recriar dinamicamente...');
+        // Criar o modal a partir do HTML original (garantir que todos os campos existem)
+        modal = document.createElement('div');
+        modal.id = 'modalCancelarAntecipado';
+        modal.className = 'modal';
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width: 500px;">
+                <div class="modal-header">
+                    <h3><i class="fas fa-times-circle"></i> Cancelar Aula com Antecedência</h3>
+                    <button class="close" onclick="fecharModal('modalCancelarAntecipado')">&times;</button>
+                </div>
+                <div class="aula-info" id="cancelar-info">
+                    <p><strong>Aluno:</strong> <span id="cancelar_aluno_nome"></span></p>
+                    <p><strong>Data/Hora:</strong> <span id="cancelar_data_hora"></span></p>
+                    <input type="hidden" id="cancelar_aula_id">
+                </div>
+                <div class="field-group">
+                    <h4><i class="fas fa-comment"></i> Motivo do Cancelamento</h4>
+                    <div class="form-group">
+                        <select id="motivo_cancelamento" class="form-control" style="width: 100%; padding: 10px; margin-bottom: 10px;">
+                            <option value="">Selecione um motivo...</option>
+                            <option value="Problemas de saúde">Problemas de saúde</option>
+                            <option value="Compromisso pessoal">Compromisso pessoal</option>
+                            <option value="Falha técnica">Falha técnica (internet/energia)</option>
+                            <option value="Emergência familiar">Emergência familiar</option>
+                            <option value="Outro">Outro (especifique)</option>
+                        </select>
+                        <textarea id="motivo_outro" rows="3" style="width: 100%; padding: 10px; display: none;" 
+                                  placeholder="Descreva o motivo do cancelamento..."></textarea>
+                    </div>
+                </div>
+                <div class="alert alert-warning" style="margin: 15px 0;">
+                    <i class="fas fa-info-circle"></i> 
+                    <strong>Nota:</strong> O aluno será notificado imediatamente sobre este cancelamento. Um crédito de reposição será gerado.
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button type="button" class="btn btn-secondary" onclick="fecharModal('modalCancelarAntecipado')">Voltar</button>
+                    <button type="button" class="btn btn-danger" onclick="confirmarCancelamentoAntecipado()">
+                        <i class="fas fa-times"></i> Confirmar Cancelamento
+                    </button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        // Reassociar a função fecharModal ao botão de fechar (já está no onclick)
+    }
+    
+    // Agora que o modal existe (ou foi recriado), buscar os elementos internos
+    const cancelarAlunoSpan = document.getElementById('cancelar_aluno_nome');
+    const cancelarDataSpan = document.getElementById('cancelar_data_hora');
+    const cancelarAulaIdInput = document.getElementById('cancelar_aula_id');
+    const motivoSelect = document.getElementById('motivo_cancelamento');
+    const motivoOutro = document.getElementById('motivo_outro');
+    
+    if (!cancelarAlunoSpan || !cancelarDataSpan || !cancelarAulaIdInput) {
+        console.error('Elementos do modal de cancelamento não encontrados mesmo após recriação');
+        alert('Erro ao carregar formulário de cancelamento. Recarregue a página.');
         return;
     }
     
-    document.getElementById('cancelar_aluno_nome').textContent = alunoNome;
-    document.getElementById('cancelar_data_hora').textContent = dataHora;
-    document.getElementById('cancelar_aula_id').value = aulaId;
+    cancelarAlunoSpan.textContent = alunoNome;
+    cancelarDataSpan.textContent = dataHora;
+    cancelarAulaIdInput.value = aulaId;
     
-    // Resetar formulário
-    document.getElementById('motivo_cancelamento').value = '';
-    document.getElementById('motivo_outro').style.display = 'none';
-    document.getElementById('motivo_outro').value = '';
+    if (motivoSelect) motivoSelect.value = '';
+    if (motivoOutro) {
+        motivoOutro.style.display = 'none';
+        motivoOutro.value = '';
+    }
     
+    // Garantir que o modal está visível
     abrirModal('modalCancelarAntecipado');
 }
 
 // ===== FUNÇÃO PARA CONFIRMAR CANCELAMENTO ANTECIPADO =====
 function confirmarCancelamentoAntecipado() {
     const aulaId = document.getElementById('cancelar_aula_id').value;
-    const motivoSelect = document.getElementById('motivo_cancelamento').value;
-    const motivoOutro = document.getElementById('motivo_outro').value;
-    
-    console.log('Confirmando cancelamento:', { aulaId, motivoSelect });
+    const motivoSelect = document.getElementById('motivo_cancelamento');
+    const motivoOutro = document.getElementById('motivo_outro');
     
     if (!aulaId) {
         alert('❌ Erro: ID da aula não identificado');
         return;
     }
     
-    let motivo = motivoSelect;
-    if (motivoSelect === 'Outro') {
-        if (!motivoOutro.trim()) {
+    let motivo = motivoSelect ? motivoSelect.value : '';
+    if (motivo === 'Outro') {
+        if (!motivoOutro || !motivoOutro.value.trim()) {
             alert('❌ Por favor, descreva o motivo do cancelamento.');
             return;
         }
-        motivo = motivoOutro;
-    } else if (!motivoSelect) {
+        motivo = motivoOutro.value.trim();
+    } else if (!motivo) {
         alert('❌ Por favor, selecione um motivo para o cancelamento.');
         return;
     }
@@ -717,7 +793,7 @@ function confirmarCancelamentoAntecipado() {
     
     const dados = {
         acao_aula: 'cancelar_antecipado',
-        aula_id: aulaId,
+        aula_id: parseInt(aulaId),
         motivo: motivo
     };
     
@@ -743,7 +819,7 @@ function confirmarCancelamentoAntecipado() {
     });
 }
 
-// ===== FUNÇÃO PARA VER DETALHES DA AULA (MELHORADA) =====
+// ===== FUNÇÃO PARA VER DETALHES DA AULA =====
 function verDetalhesAula(aulaId) {
     console.log('Ver detalhes da aula ID:', aulaId);
     
@@ -775,7 +851,6 @@ function verDetalhesAula(aulaId) {
             const dataStr = dataHora.toLocaleDateString('pt-PT');
             const horaStr = dataHora.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
             
-            // Traduzir status e definir cores
             let statusTexto = '', statusCor = '';
             switch (aula.status) {
                 case 'realizado':
@@ -826,12 +901,9 @@ function verDetalhesAula(aulaId) {
                 </div>
             `;
             
-            // Se a aula foi cancelada, mostrar motivo e quem cancelou
             if (aula.status === 'cancelado_aluno' || aula.status === 'cancelado_professor') {
                 const cancelador = aula.status === 'cancelado_aluno' ? 'Aluno' : 'Professor';
-                // O motivo está na coluna observacoes_professor
                 let motivo = aula.observacoes_professor || 'Motivo não informado';
-                // Remover possíveis prefixos (como "❌ Cancelada pelo aluno. Motivo: ")
                 if (motivo.includes('Motivo:')) {
                     const match = motivo.match(/Motivo:\s*(.+)/);
                     if (match) motivo = match[1];
@@ -844,7 +916,6 @@ function verDetalhesAula(aulaId) {
                 `;
             }
             
-            // Disciplinas registadas (se houver)
             if (aula.itens && aula.itens.length > 0) {
                 html += `<h4 style="margin: 20px 0 10px; color: #2c3e50;"><i class="fas fa-graduation-cap"></i> Disciplinas</h4>`;
                 html += `<div style="overflow-x: auto;">
@@ -874,7 +945,6 @@ function verDetalhesAula(aulaId) {
                 html += `<p style="margin-top: 10px;"><em>Nenhuma disciplina registada para esta aula.</em></p>`;
             }
             
-            // Observações gerais (se não for cancelada, para não repetir)
             if (aula.observacoes_professor && aula.status !== 'cancelado_aluno' && aula.status !== 'cancelado_professor') {
                 html += `
                     <div style="margin-top: 20px; background: #e3f2fd; padding: 15px; border-radius: 8px; border-left: 4px solid #2196F3;">
@@ -916,13 +986,11 @@ function verAulasAluno(fichaId, nomeAluno) {
     abrirModal('modalAulasAluno');
 }
 
-// ===== FUNÇÃO: VER AULAS CANCELADAS AUTOMATICAMENTE =====
 function verAulasCanceladas() {
     const urlParams = new URLSearchParams(window.location.search);
     const mes = urlParams.get('mes') || new Date().getMonth() + 1;
     const ano = urlParams.get('ano') || new Date().getFullYear();
     
-    // Criar modal se não existir
     if (!document.getElementById('modalCanceladasAuto')) {
         const modalCanceladas = document.createElement('div');
         modalCanceladas.id = 'modalCanceladasAuto';
@@ -959,7 +1027,6 @@ function verAulasCanceladas() {
     abrirModal('modalCanceladasAuto');
 }
 
-// ===== FUNÇÃO PARA MOSTRAR NOTIFICAÇÃO DE AULAS CANCELADAS =====
 function mostrarNotificacaoCanceladas(total) {
     if (total > 0 && !document.getElementById('notificacao-canceladas')) {
         const notificacao = document.createElement('div');
@@ -985,23 +1052,17 @@ function mostrarNotificacaoCanceladas(total) {
     }
 }
 
-// ===== CONFIGURAÇÃO DO SELECT DE MOTIVOS =====
 function configurarSelectMotivos() {
     const motivoSelect = document.getElementById('motivo_cancelamento');
     const motivoOutro = document.getElementById('motivo_outro');
     
     if (motivoSelect && motivoOutro) {
         motivoSelect.addEventListener('change', function() {
-            if (this.value === 'Outro') {
-                motivoOutro.style.display = 'block';
-            } else {
-                motivoOutro.style.display = 'none';
-            }
+            motivoOutro.style.display = this.value === 'Outro' ? 'block' : 'none';
         });
     }
 }
 
-// ===== FUNÇÕES DE NOTIFICAÇÕES =====
 function toggleNotificacoes() {
     const dropdown = document.getElementById('notificacoesDropdown');
     if (dropdown) {
@@ -1029,19 +1090,17 @@ function marcarComoLida(notificacaoId) {
 }
 
 function marcarTodasComoLidas() {
-    fetch('notificacoes.php?acao=marcar_todas_lidas', {
-        method: 'POST'
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            document.querySelectorAll('.notificacao-item.nao-lida').forEach(item => {
-                item.classList.remove('nao-lida');
-                item.classList.add('lida');
-            });
-            atualizarContadorNotificacoes();
-        }
-    });
+    fetch('notificacoes.php?acao=marcar_todas_lidas', { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.querySelectorAll('.notificacao-item.nao-lida').forEach(item => {
+                    item.classList.remove('nao-lida');
+                    item.classList.add('lida');
+                });
+                atualizarContadorNotificacoes();
+            }
+        });
 }
 
 function atualizarContadorNotificacoes() {
@@ -1059,10 +1118,8 @@ function atualizarContadorNotificacoes() {
                     newBadge.textContent = data.nao_lidas;
                     btn.appendChild(newBadge);
                 }
-            } else {
-                if (badge) {
-                    badge.remove();
-                }
+            } else if (badge) {
+                badge.remove();
             }
         });
 }
@@ -1070,13 +1127,6 @@ function atualizarContadorNotificacoes() {
 // ===== INICIALIZAÇÃO =====
 document.addEventListener('DOMContentLoaded', function() {
     console.log('🚀 Dashboard Professor inicializado');
-    console.log('📊 Dados disponíveis:', { 
-        alunosData: window.alunosData,
-        totalCanceladasAuto: window.totalCanceladasAuto,
-        mesAtual: window.mesAtual,
-        anoAtual: window.anoAtual,
-        notificacoesNaoLidas: window.notificacoesNaoLidas
-    });
     
     // Mostrar seção de boas-vindas por padrão
     document.querySelectorAll("main section").forEach(sec => sec.classList.add("hidden"));
@@ -1088,104 +1138,44 @@ document.addEventListener('DOMContentLoaded', function() {
         primeiroLink.classList.add('active');
     }
     
-    // ===== MENU MOBILE - EXATAMENTE IGUAL AO TESTE QUE FUNCIONOU =====
+    // ===== MENU MOBILE =====
     const menuToggle = document.getElementById('menuToggle');
     const menuClose = document.getElementById('menuClose');
     const overlay = document.getElementById('sidebarOverlay');
     const sidebar = document.getElementById('sidebar');
     
-    console.log('🔍 Elementos do menu:', {
-        menuToggle: !!menuToggle,
-        menuClose: !!menuClose,
-        overlay: !!overlay,
-        sidebar: !!sidebar
-    });
-    
-    // Botão do menu hambúrguer - IGUAL AO TESTE
     if (menuToggle) {
         menuToggle.onclick = function(e) {
             e.preventDefault();
             e.stopPropagation();
-            console.log('🍔 Menu hambúrguer clicado');
-            
-            // EXATAMENTE O MESMO CÓDIGO DO TESTE
             sidebar.classList.add('active');
             overlay.classList.add('active');
-            
-            console.log('Depois - sidebar classes:', sidebar.className);
-            console.log('Depois - overlay classes:', overlay.className);
-            console.log('Transform sidebar:', window.getComputedStyle(sidebar).transform);
-            
             return false;
         };
-        console.log('✅ Botão menu toggle configurado');
     }
     
-    // Botão de fechar no sidebar
     if (menuClose) {
         menuClose.onclick = function(e) {
             e.preventDefault();
             e.stopPropagation();
-            console.log('❌ Botão fechar clicado');
-            
             sidebar.classList.remove('active');
             overlay.classList.remove('active');
-            
             return false;
         };
-        console.log('✅ Botão menu close configurado');
     }
     
-    // Overlay (fundo escuro)
     if (overlay) {
         overlay.onclick = function(e) {
             e.preventDefault();
-            console.log('🔲 Overlay clicado');
-            
             sidebar.classList.remove('active');
             overlay.classList.remove('active');
         };
-        console.log('✅ Overlay configurado');
     }
     
-    // Links do sidebar (fechar ao clicar em mobile)
-    document.querySelectorAll('.sidebar ul li a').forEach(link => {
-        if (link.getAttribute('href') === 'logout.php') {
-            return;
-        }
-        
-        link.addEventListener('click', function(e) {
-            if (window.innerWidth <= 768) {
-                console.log('🔗 Link clicado, fechando sidebar');
-                setTimeout(function() {
-                    sidebar.classList.remove('active');
-                    overlay.classList.remove('active');
-                }, 150);
-            }
-        });
-    });
-    
-    // Fechar sidebar ao redimensionar para desktop
-    window.addEventListener('resize', function() {
-        if (window.innerWidth > 768) {
-            sidebar.classList.remove('active');
-            overlay.classList.remove('active');
-        }
-    });
-    
-    // Fechar sidebar com tecla ESC
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') {
-            sidebar.classList.remove('active');
-            overlay.classList.remove('active');
-        }
-    });
-    
     // Adicionar eventos aos dias do calendário
-    document.querySelectorAll('.calendario-dia:not(.fora-periodo)').forEach(dia => {
+    document.querySelectorAll('.calendario-dia:not(.vazio)').forEach(dia => {
         dia.addEventListener('click', function(e) {
             e.stopPropagation();
-            console.log('📅 Dia clicado');
             abrirModalDiaProfessor(this);
         });
     });
@@ -1195,7 +1185,6 @@ document.addEventListener('DOMContentLoaded', function() {
         mostrarNotificacaoCanceladas(window.totalCanceladasAuto);
     }
     
-    // Configurar select de motivos
     configurarSelectMotivos();
     
     // Fechar modais ao clicar fora
@@ -1206,7 +1195,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // Fechar modais com ESC
     document.addEventListener('keydown', function(event) {
         if (event.key === 'Escape') {
             document.querySelectorAll('.modal.active').forEach(modal => {
@@ -1216,13 +1204,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // Fechar dropdown de notificações ao clicar fora
     document.addEventListener('click', function(event) {
         if (!event.target.closest('.notificacoes-container')) {
             const dropdown = document.getElementById('notificacoesDropdown');
-            if (dropdown) {
-                dropdown.style.display = 'none';
-            }
+            if (dropdown) dropdown.style.display = 'none';
         }
     });
 });

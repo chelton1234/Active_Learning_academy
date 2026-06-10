@@ -144,6 +144,16 @@ body {
     display: block;
 }
 
+/* ===== SEÇÕES DO DASHBOARD ===== */
+.dashboard-section {
+    display: block;
+    transition: opacity 0.2s ease;
+}
+
+.dashboard-section.hidden {
+    display: none !important;
+}
+
 /* ===== CARDS E CONTAINERS ===== */
 .welcome-card {
     background: white;

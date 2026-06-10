@@ -1,11 +1,19 @@
 <?php
-// aprovar_pedido.php - Aprovacao de pedido com insercao na tabela fichas
+// aprovar_pedido.php - Aprovação de pedido com envio de e‑mail (PHPMailer) - Layout profissional
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
 error_reporting(E_ALL);
 header('Content-Type: application/json');
 
 session_start();
+
+// ========== CARREGAR DEPENDÊNCIAS ==========
+require_once __DIR__ . '/vendor/autoload.php';
+require_once __DIR__ . '/env.php';
+
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
+
 if (!isset($_SESSION['usuario_id']) || !isset($_SESSION['admin'])) {
     echo json_encode(['sucesso' => false, 'mensagem' => 'Não autorizado']);
     exit;
@@ -81,14 +89,14 @@ try {
     $dias_semana_json = json_encode(['dias' => explode(', ', $pedido['dias_semana'])]);
     $horarios_json = json_encode(['preferencial' => $pedido['horario']]);
     $nivel_cambridge = $pedido['nivel_cambridge'];
-    $pacote_nome = $pedido['pacote']; // 2dias,3dias,4dias
+    $pacote_nome = $pedido['pacote'];
     $valor_total = $pedido['preco_total'];
     $valor_mensal = $pedido['preco_base'];
     $observacoes = $pedido['observacoes'];
     $contacto = $pedido['contacto'];
     $localizacao = $pedido['localizacao'];
 
-    // 4. Inserir ficha (apenas colunas que existem)
+    // 4. Inserir ficha
     $sql = "INSERT INTO fichas 
             (usuario_id, nome, email, contacto_encarregado, localizacao, nivel, nivel_cambridge, 
              pacote, regime_presencial, regime_domicilio, dias_semana, horarios_json, dificuldade, 
@@ -97,28 +105,49 @@ try {
     
     $stmt3 = $conn->prepare($sql);
     $stmt3->bind_param("isssssiisssddiis", 
-        $usuario_id,                       // i
-        $pedido['nome'],                   // s
-        $pedido['email'],                  // s
-        $contacto,                         // s (contacto_encarregado)
-        $localizacao,                      // s
-        $nivel_cambridge,                  // s (nivel_cambridge)
-        $pacote_nome,                      // s (pacote)
-        $regime_presencial,                // i
-        $regime_domicilio,                 // i
-        $dias_semana_json,                 // s
-        $horarios_json,                    // s
-        $observacoes,                      // s (dificuldade)
-        $valor_total,                      // d
-        $valor_mensal,                     // d
-        $professor_id,                     // i
-        $prof_nome                         // s
+        $usuario_id,
+        $pedido['nome'],
+        $pedido['email'],
+        $contacto,
+        $localizacao,
+        $nivel_cambridge,
+        $pacote_nome,
+        $regime_presencial,
+        $regime_domicilio,
+        $dias_semana_json,
+        $horarios_json,
+        $observacoes,
+        $valor_total,
+        $valor_mensal,
+        $professor_id,
+        $prof_nome
     );
     if (!$stmt3->execute()) throw new Exception("Erro ao criar ficha: " . $stmt3->error);
     $ficha_id = $stmt3->insert_id;
     $stmt3->close();
 
-    // 5. Atualizar pedido
+    // 5. Inserir horários na tabela horarios_aulas
+    $dias_array = explode(', ', $pedido['dias_semana']);
+    $horario_padrao = $pedido['horario'];
+    $mapa_dias = [
+        'Segunda' => 'segunda', 'Segunda-feira' => 'segunda',
+        'Terça' => 'terca', 'Terça-feira' => 'terca', 'Terca' => 'terca',
+        'Quarta' => 'quarta', 'Quarta-feira' => 'quarta',
+        'Quinta' => 'quinta', 'Quinta-feira' => 'quinta',
+        'Sexta' => 'sexta', 'Sexta-feira' => 'sexta',
+        'Sábado' => 'sabado', 'Sabado' => 'sabado',
+        'Domingo' => 'domingo'
+    ];
+    foreach ($dias_array as $dia) {
+        $dia_limpo = trim($dia);
+        $dia_normalizado = $mapa_dias[$dia_limpo] ?? strtolower($dia_limpo);
+        $stmt_h = $conn->prepare("INSERT INTO horarios_aulas (ficha_id, dia_semana, horario) VALUES (?, ?, ?)");
+        $stmt_h->bind_param("iss", $ficha_id, $dia_normalizado, $horario_padrao);
+        $stmt_h->execute();
+        $stmt_h->close();
+    }
+
+    // 6. Actualizar pedido
     $stmt4 = $conn->prepare("UPDATE pedidos_explicadores SET status = 'aprovado', ficha_id = ?, usuario_id = ? WHERE id = ?");
     $stmt4->bind_param("iii", $ficha_id, $usuario_id, $pedido_id);
     $stmt4->execute();
@@ -126,20 +155,101 @@ try {
 
     $conn->commit();
 
-    // Enviar email (opcional)
-    $assunto = "Bem-vindo à plataforma WebTeaching - Credenciais de acesso";
-    $mensagem_email = "Olá {$pedido['nome']},<br><br>Seu pedido foi aprovado!<br>
-                       Acesse o sistema com:<br>
-                       Email: {$pedido['email']}<br>
-                       Senha: {$senha}<br>
-                       <a href='http://localhost/Active_Learning_Academy/login.php'>Clique aqui para fazer login</a><br><br>
-                       Atenciosamente,<br>Equipa WebTeaching";
-    $headers = "MIME-Version: 1.0\r\nContent-type: text/html; charset=utf-8\r\nFrom: noreply@webteaching.com\r\n";
-    // mail($pedido['email'], $assunto, $mensagem_email, $headers); // Descomente quando tiver email configurado
+    // ========== ENVIAR E-MAIL COM A SENHA (layout profissional) ==========
+    $email_enviado = false;
+    if (!empty($pedido['email'])) {
+        $mail = new PHPMailer(true);
+        try {
+            $mail->CharSet = 'UTF-8';
+            $mail->isSMTP();
+            $mail->Host       = SMTP_HOST;
+            $mail->SMTPAuth   = true;
+            $mail->Username   = SMTP_USER;
+            $mail->Password   = SMTP_PASS;
+            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+            $mail->Port       = SMTP_PORT;
+
+            $mail->setFrom(SMTP_FROM, SMTP_FROM_NAME);
+            $mail->addAddress($pedido['email'], $pedido['nome']);
+
+            $mail->isHTML(true);
+            $mail->Subject = "Bem‑vindo à Active Learning Academy – Credenciais de acesso";
+
+            // Template HTML profissional
+            $mail->Body = '
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Bem‑vindo à Active Learning Academy</title>
+</head>
+<body style="margin:0; padding:0; font-family: Arial, Helvetica, sans-serif; background-color: #f4f7fc;">
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f4f7fc; padding: 20px;">
+        <tr>
+            <td align="center">
+                <table width="550" cellpadding="0" cellspacing="0" border="0" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+                    <!-- Cabeçalho -->
+                    <tr>
+                        <td style="background: linear-gradient(135deg, #1f3c88, #2c3e50); padding: 30px 25px; text-align: center;">
+                            <h1 style="color: #ffffff; font-size: 24px; margin: 0; font-weight: 600;">Active Learning Academy</h1>
+                            <p style="color: #d4e6ff; margin: 8px 0 0; font-size: 14px;">Expanding Minds. Elevating Futures.</p>
+                        </td>
+                    </tr>
+                    <!-- Conteúdo -->
+                    <tr>
+                        <td style="padding: 30px 25px 25px;">
+                            <h2 style="color: #1f3c88; font-size: 22px; margin: 0 0 15px; font-weight: 500;">Olá ' . htmlspecialchars($pedido['nome']) . ',</h2>
+                            <p style="color: #2c3e50; font-size: 16px; line-height: 1.5; margin: 0 0 20px;">
+                                O seu pedido foi aprovado! Já pode aceder à nossa plataforma com as credenciais abaixo:
+                            </p>
+                            <table width="100%" cellpadding="10" cellspacing="0" style="background-color: #f8fafc; border-radius: 10px; margin: 20px 0;">
+                                <tr>
+                                    <td width="30%" style="color: #1f3c88; font-weight: bold;">Email:</td>
+                                    <td>' . htmlspecialchars($pedido['email']) . '</td>
+                                </tr>
+                                <tr>
+                                    <td style="color: #1f3c88; font-weight: bold;">Senha temporária:</td>
+                                    <td><strong style="color: #e67e22; font-size: 18px;">' . htmlspecialchars($senha) . '</strong></td>
+                                </tr>
+                            </table>
+                            <p style="text-align: center; margin: 25px 0 20px;">
+                                <a href="http://localhost/Active_Learning_Academy/login.php" style="display: inline-block; background-color: #27ae60; color: #ffffff; text-decoration: none; padding: 12px 30px; border-radius: 30px; font-size: 16px; font-weight: bold;">🔐 Aceder à Plataforma</a>
+                            </p>
+                            <p style="color: #2c3e50; font-size: 14px; line-height: 1.5; margin: 20px 0 0;">
+                                Recomendamos que altere a sua senha após o primeiro acesso.
+                            </p>
+                            <hr style="border: none; border-top: 1px solid #e0e7ef; margin: 25px 0 10px;">
+                            <p style="color: #7f8c8d; font-size: 12px; text-align: center; margin: 0;">
+                                Active Learning Academy – Transformando conhecimento em sucesso.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>';
+            $mail->AltBody = "Olá {$pedido['nome']},\n\nSeu pedido foi aprovado!\n\nEmail: {$pedido['email']}\nSenha: {$senha}\n\nAcesse em: http://localhost/Active_Learning_Academy/login.php\n\nRecomendamos que altere a sua senha após o primeiro acesso.\n\nAtenciosamente,\nEquipa Active Learning Academy";
+
+            $mail->send();
+            $email_enviado = true;
+            error_log("E-mail enviado com sucesso para {$pedido['email']}");
+        } catch (Exception $e) {
+            error_log("Erro ao enviar e-mail: " . $mail->ErrorInfo);
+        }
+    }
+
+    $mensagem = "Pedido aprovado! Aluno criado com senha: $senha";
+    if ($email_enviado) {
+        $mensagem .= " As credenciais foram enviadas para o e‑mail do aluno.";
+    } else {
+        $mensagem .= " Não foi possível enviar o e‑mail automaticamente. Por favor, informe o aluno manualmente.";
+    }
 
     echo json_encode([
         'sucesso' => true,
-        'mensagem' => "Pedido aprovado! Aluno criado com senha: $senha",
+        'mensagem' => $mensagem,
         'ficha_id' => $ficha_id
     ]);
 

@@ -4,7 +4,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const menuItems = document.querySelectorAll('.sidebar ul li a');
     const secoes = {
         inicio: document.getElementById('inicio'),
-        aprovacoes: document.getElementById('aprovacoes'),
+        solicitacoes: document.getElementById('solicitacoes'),
         alunos_activos: document.getElementById('alunos_activos'),
         professores: document.getElementById('professores'),
         fichas_antigas: document.getElementById('fichas_antigas')
@@ -69,7 +69,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             <div class="notificacao-titulo">Novo pedido pendente</div>
                             <div class="notificacao-mensagem">${escapeHtml(not.nome)} submeteu um pedido de explicador.</div>
                             <div class="notificacao-data">${formatarData(not.data_submissao)}</div>
-                            <a href="#" onclick="redirecionarParaAprovacoes(${not.id})" class="notificacao-link">Ver pedido →</a>
+                            <a href="#" onclick="redirecionarParaSolicitacoes(${not.id})" class="notificacao-link">Ver pedido →</a>
                         `;
                         notifList.insertBefore(item, notifList.firstChild);
                         if (not.id > ultimoIdNotif) ultimoIdNotif = not.id;
@@ -79,8 +79,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         notifBadge.innerText = badgeCount;
                         notifBadge.style.display = badgeCount ? 'inline-block' : 'none';
                     }
-                    // Atualizar badge do menu "Aprovações"
-                    const badgeMenu = document.querySelector('.sidebar ul li a[data-secao="aprovacoes"] .badge');
+                    const badgeMenu = document.querySelector('.sidebar ul li a[data-secao="solicitacoes"] .badge');
                     if (badgeMenu) badgeMenu.innerText = badgeCount;
                 }
             })
@@ -96,39 +95,44 @@ document.addEventListener('DOMContentLoaded', function() {
             if (notifDropdown) notifDropdown.classList.remove('active');
         });
     }
-    // Iniciar polling a cada 20 segundos
     setInterval(atualizarNotificacoes, 20000);
     atualizarNotificacoes();
 
     window.marcarTodasLidas = function() {
         if (notifBadge) notifBadge.style.display = 'none';
         if (notifList) notifList.innerHTML = '<div class="notificacao-vazia"><i class="fas fa-bell-slash"></i><p>Nenhuma notificação</p></div>';
-        const badgeMenu = document.querySelector('.sidebar ul li a[data-secao="aprovacoes"] .badge');
+        const badgeMenu = document.querySelector('.sidebar ul li a[data-secao="solicitacoes"] .badge');
         if (badgeMenu) badgeMenu.innerText = '0';
-        // Opcional: enviar requisição para marcar como lidas no servidor
+        // Notificar o servidor (opcional)
+        fetch('dashboard_admin.php?ajax=marcar_notificacoes_lidas', { method: 'POST' }).catch(console.warn);
     };
 
-    window.redirecionarParaAprovacoes = function(pedidoId) {
-        ativarSecao('aprovacoes');
+    window.redirecionarParaSolicitacoes = function(pedidoId) {
+        ativarSecao('solicitacoes');
         if (notifDropdown) notifDropdown.classList.remove('active');
-        // Opcional: rolar até o pedido na tabela
-        const linha = document.querySelector(`#aprovacoes tr[data-pedido-id="${pedidoId}"]`);
+        const linha = document.querySelector(`#solicitacoes tr[data-pedido-id="${pedidoId}"]`);
         if (linha) linha.scrollIntoView({ behavior: 'smooth', block: 'center' });
     };
 
-    // ========== MODAL DE APROVAÇÃO ==========
-    window.abrirModalAprovacao = function(pedidoId) {
-        document.getElementById('aprovacao_pedido_id').value = pedidoId;
-        document.getElementById('modalAprovacao').classList.add('active');
+    // ========== FUNÇÕES DE APROVAÇÃO (MODAL DETALHES + APROVAÇÃO) ==========
+    window.verDetalhesSolicitacao = function(pedidoId) {
+        // Esta função é definida no HTML para manter a lógica unificada.
+        // Se não existir no HTML, pode ser implementada aqui.
+        if (typeof window.verDetalhesSolicitacaoInline !== 'undefined') {
+            window.verDetalhesSolicitacaoInline(pedidoId);
+        } else {
+            // fallback: abrir modal de aprovação simples
+            document.getElementById('aprovacao_pedido_id').value = pedidoId;
+            document.getElementById('modalAprovacao')?.classList.add('active');
+        }
     };
 
-    window.confirmarAprovacao = function() {
-        const pedidoId = document.getElementById('aprovacao_pedido_id').value;
-        const professorId = document.getElementById('aprovacao_professor_id').value;
-        if (!professorId) {
-            alert('Selecione um professor para atribuir ao aluno.');
-            return;
-        }
+    window.aprovarSolicitacao = function() {
+        // Esta função está definida no HTML, mas mantemos aqui um fallback
+        const pedidoId = document.getElementById('aprovacao_pedido_id')?.value;
+        const professorId = document.getElementById('selectProfessorSolicitacao')?.value;
+        if (!pedidoId) { alert('Nenhum pedido selecionado.'); return; }
+        if (!professorId) { alert('Selecione um professor.'); return; }
         fetch('aprovar_pedido.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -146,117 +150,68 @@ document.addEventListener('DOMContentLoaded', function() {
         .catch(err => alert('Erro ao aprovar: ' + err));
     };
 
-    // ========== MODAL DE DETALHES DO PEDIDO (APROVAÇÕES) ==========
-    window.verDetalhesPedido = function(pedidoId) {
-        fetch(`detalhes_pedido.php?id=${pedidoId}`)
-            .then(res => res.json())
-            .then(data => {
-                if (data.erro) return alert(data.erro);
-                const html = `
-                    <p><strong>ID:</strong> ${data.id}</p>
-                    <p><strong>Data:</strong> ${formatarData(data.data_submissao)}</p>
-                    <p><strong>Nome:</strong> ${escapeHtml(data.nome)}</p>
-                    <p><strong>Email:</strong> ${escapeHtml(data.email)}</p>
-                    <p><strong>Contacto:</strong> ${escapeHtml(data.contacto)}</p>
-                    <p><strong>Localização:</strong> ${escapeHtml(data.localizacao) || '—'}</p>
-                    <p><strong>Nível Cambridge:</strong> ${escapeHtml(data.nivel_cambridge)}</p>
-                    <p><strong>Tipo de aula:</strong> ${data.tipo_aula === 'presencial' ? 'Presencial' : 'Ao domicílio'}</p>
-                    <p><strong>Pacote:</strong> ${data.pacote}</p>
-                    <p><strong>Total:</strong> ${data.preco_total} MT</p>
-                    <p><strong>Dias da semana:</strong> ${escapeHtml(data.dias_semana)}</p>
-                    <p><strong>Horário:</strong> ${escapeHtml(data.horario)}</p>
-                    <p><strong>Observações:</strong> ${escapeHtml(data.observacoes) || 'Nenhuma'}</p>
-                `;
-                document.getElementById('detalhesPedidoBody').innerHTML = html;
-                document.getElementById('modalDetalhesPedido').classList.add('active');
-            })
-            .catch(err => alert('Erro ao carregar detalhes: ' + err));
-    };
-
     // ========== MODAL DE DETALHES DO ALUNO (com calendário) ==========
     window.verDetalhesAluno = function(fichaId) {
         const modal = document.getElementById('modalDetalhesAluno');
         const bodyDiv = document.getElementById('detalhesAlunoBody');
+        if (!modal || !bodyDiv) return;
         bodyDiv.innerHTML = '<div class="loading">Carregando dados do aluno...</div>';
         modal.classList.add('active');
 
-        // Carregar dados do aluno e calendário
         const mesAtual = new Date().getMonth() + 1;
         const anoAtual = new Date().getFullYear();
-        fetch(`detalhes_aluno_ajax.php?ficha_id=${fichaId}&mes=${mesAtual}&ano=${anoAtual}`)
+        fetch(`dashboard_admin.php?ajax=aluno_detalhes&ficha_id=${fichaId}&mes=${mesAtual}&ano=${anoAtual}`)
             .then(res => res.json())
             .then(data => {
-                if (data.erro) {
-                    bodyDiv.innerHTML = `<p class="erro">${data.erro}</p>`;
-                    return;
-                }
+                if (data.erro) throw new Error(data.erro);
                 const aluno = data.aluno;
                 let html = `
                     <div class="info-grid">
-                        <div class="info-item"><span class="info-label">Nome:</span><span class="info-value">${escapeHtml(aluno.nome)}</span></div>
-                        <div class="info-item"><span class="info-label">Email:</span><span class="info-value">${escapeHtml(aluno.email)}</span></div>
-                        <div class="info-item"><span class="info-label">Contacto:</span><span class="info-value">${escapeHtml(aluno.contacto)}</span></div>
-                        <div class="info-item"><span class="info-label">Nível:</span><span class="info-value">${escapeHtml(aluno.nivel_cambridge)}</span></div>
-                        <div class="info-item"><span class="info-label">Pacote:</span><span class="info-value">${aluno.pacote}</span></div>
-                        <div class="info-item"><span class="info-label">Professor:</span><span class="info-value">${escapeHtml(aluno.professor_atribuido) || '—'}</span></div>
-                        <div class="info-item"><span class="info-label">Status Pagamento:</span><span class="info-value">${aluno.pagamento_status === 'pago' ? '✅ Pago' : '⏳ Pendente'}</span></div>
+                        <div><strong>Nome:</strong> ${escapeHtml(aluno.nome)}</div>
+                        <div><strong>Email:</strong> ${escapeHtml(aluno.email)}</div>
+                        <div><strong>Contacto:</strong> ${escapeHtml(aluno.contacto) || '—'}</div>
+                        <div><strong>Nível:</strong> ${escapeHtml(aluno.nivel_cambridge) || '—'}</div>
+                        <div><strong>Pacote:</strong> ${aluno.pacote}</div>
+                        <div><strong>Professor:</strong> ${escapeHtml(aluno.professor_atribuido) || '—'}</div>
+                        <div><strong>Status Pagamento:</strong> ${aluno.pagamento_status === 'pago' ? '✅ Pago' : '⏳ Pendente'}</div>
                     </div>
                     <hr>
                     <h4><i class="fas fa-calendar-alt"></i> Calendário de Aulas</h4>
-                    <div class="calendario-navegacao" data-ficha-id="${fichaId}">
-                        <button class="btn-navegacao" data-mes="${data.mes-1 <= 0 ? 12 : data.mes-1}" data-ano="${data.mes-1 <= 0 ? data.ano-1 : data.ano}"><i class="fas fa-chevron-left"></i> Mês anterior</button>
-                        <span class="mes-atual">${mesesNomes[data.mes-1]} ${data.ano}</span>
-                        <button class="btn-navegacao" data-mes="${data.mes+1 > 12 ? 1 : data.mes+1}" data-ano="${data.mes+1 > 12 ? data.ano+1 : data.ano}">Próximo mês <i class="fas fa-chevron-right"></i></button>
-                    </div>
-                    <div id="calendario-aluno-${fichaId}" class="calendario-container">${data.calendario_html || '<p>Carregando calendário...</p>'}</div>
+                    <div id="calendario-aluno-${fichaId}">Carregando calendário...</div>
                 `;
                 bodyDiv.innerHTML = html;
-
-                // Adicionar eventos de navegação do calendário
-                document.querySelectorAll('.btn-navegacao').forEach(btn => {
-                    btn.addEventListener('click', function(e) {
-                        const novoMes = parseInt(this.getAttribute('data-mes'));
-                        const novoAno = parseInt(this.getAttribute('data-ano'));
-                        carregarCalendarioAluno(fichaId, novoMes, novoAno, bodyDiv);
-                    });
-                });
+                // Carregar calendário
+                fetch(`dashboard_admin.php?ajax=calendario_aluno&ficha_id=${fichaId}&mes=${data.mes}&ano=${data.ano}`)
+                    .then(res => res.text())
+                    .then(calHtml => {
+                        document.getElementById(`calendario-aluno-${fichaId}`).innerHTML = calHtml;
+                    })
+                    .catch(() => document.getElementById(`calendario-aluno-${fichaId}`).innerHTML = '<p>Erro ao carregar calendário.</p>');
             })
-            .catch(err => {
-                console.error(err);
-                bodyDiv.innerHTML = '<p class="erro">Erro ao carregar dados do aluno.</p>';
-            });
+            .catch(err => { bodyDiv.innerHTML = '<p class="erro">Erro: ' + err.message + '</p>'; });
     };
 
-    function carregarCalendarioAluno(fichaId, mes, ano, container) {
-        fetch(`detalhes_aluno_ajax.php?ficha_id=${fichaId}&mes=${mes}&ano=${ano}`)
-            .then(res => res.json())
-            .then(data => {
-                if (data.erro) return;
-                const calDiv = document.querySelector(`#calendario-aluno-${fichaId}`);
-                if (calDiv) calDiv.innerHTML = data.calendario_html || '<p>Sem aulas neste mês.</p>';
-                // Atualizar título do mês
-                const mesSpan = container.querySelector('.mes-atual');
-                if (mesSpan) mesSpan.innerText = `${mesesNomes[mes-1]} ${ano}`;
-                // Atualizar botões de navegação
-                const btnPrev = container.querySelector('.btn-navegacao:first-child');
-                const btnNext = container.querySelector('.btn-navegacao:last-child');
-                if (btnPrev) {
-                    const prevMes = mes-1 <= 0 ? 12 : mes-1;
-                    const prevAno = mes-1 <= 0 ? ano-1 : ano;
-                    btnPrev.setAttribute('data-mes', prevMes);
-                    btnPrev.setAttribute('data-ano', prevAno);
-                }
-                if (btnNext) {
-                    const nextMes = mes+1 > 12 ? 1 : mes+1;
-                    const nextAno = mes+1 > 12 ? ano+1 : ano;
-                    btnNext.setAttribute('data-mes', nextMes);
-                    btnNext.setAttribute('data-ano', nextAno);
-                }
-            })
-            .catch(err => console.error(err));
-    }
+    // ========== EXCLUIR ALUNO (REMOVER COMPLETAMENTE) ==========
+    window.excluirAluno = function(fichaId, usuarioId, nome) {
+        if (!confirm(`Tem certeza que deseja excluir permanentemente o aluno "${nome}"?\n\nTodas as suas aulas, horários, pagamentos e dados serão removidos.`)) return;
+        fetch('dashboard_admin.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `acao_excluir_aluno=1&ficha_id=${fichaId}&usuario_id=${usuarioId}`
+        })
+        .then(res => res.text())
+        .then(data => {
+            if (data.includes('excluído completamente')) {
+                alert('✅ Aluno excluído com sucesso.');
+                location.reload();
+            } else {
+                alert('❌ Erro ao excluir aluno: ' + data);
+            }
+        })
+        .catch(err => alert('Erro: ' + err));
+    };
 
-    // ========== FUNÇÕES EXISTENTES ==========
+    // ========== FUNÇÕES EXISTENTES (Fichas, Professores) ==========
     window.excluirFicha = function(fichaId, btn) {
         if (!confirm('Excluir esta ficha permanentemente?')) return;
         fetch('excluir_ficha.php', {
@@ -292,12 +247,12 @@ document.addEventListener('DOMContentLoaded', function() {
         return d.toLocaleDateString('pt-PT') + ' ' + d.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
     }
 
-    const mesesNomes = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-
     // Fechar modais
     window.fecharModal = function(modalId) {
-        document.getElementById(modalId).classList.remove('active');
+        document.getElementById(modalId)?.classList.remove('active');
     };
+
+    // Fechar modal ao clicar no overlay
     window.addEventListener('click', function(e) {
         if (e.target.classList && e.target.classList.contains('modal-overlay')) {
             e.target.classList.remove('active');

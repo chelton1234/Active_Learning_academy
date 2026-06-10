@@ -1,14 +1,14 @@
 <?php
-// recibo_pdf.php - Versão corrigida com header em tabela
+// recibo_pdf.php - Versão corrigida que usa GET e gera PDF
 session_start();
 require 'config.php';
 require_once 'vendor/autoload.php';
 
 use TCPDF;
 
-// Verifica se a referência foi passada
-if (!isset($_GET['referencia'])) {
-    exit("Referência não informada.");
+// Verifica se a referência foi passada via GET
+if (!isset($_GET['referencia']) || empty($_GET['referencia'])) {
+    die("Referência não informada.");
 }
 
 $referencia = trim($_GET['referencia']);
@@ -19,7 +19,7 @@ $stmt->execute([$referencia]);
 $pagamento = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$pagamento) {
-    exit("Pagamento não encontrado.");
+    die("Pagamento não encontrado.");
 }
 
 // Buscar ficha
@@ -28,7 +28,7 @@ $stmt->execute([$pagamento['ficha_id']]);
 $ficha = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$ficha) {
-    exit("Ficha do aluno não encontrada.");
+    die("Ficha do aluno não encontrada.");
 }
 
 // BUSCAR HORÁRIOS DA TABELA horarios_aulas
@@ -94,7 +94,7 @@ $pacote_nome = match($ficha['pacote']) {
 $nivel_label = match($ficha['nivel']) {
     'primary' => 'Ensino Primário',
     'secondary' => 'Ensino Secundário',
-    'cambridge' => 'Pré-Universitário',
+    'cambridge' => 'Pré-Universitário (Cambridge)',
     default => $ficha['nivel']
 };
 
@@ -139,7 +139,7 @@ $html = '
     <tr>
         <td align="right">
             <h2 style="color:#003366; margin:0; font-size:14px; font-weight:bold;">COMPROVANTE DE PAGAMENTO</h2>
-            <p style="color:#666; margin:2px 0 0; font-size:9px;">Nº: ' . $referencia . '</p>
+            <p style="color:#666; margin:2px 0 0; font-size:9px;">Nº: ' . htmlspecialchars($referencia) . '</p>
         </td>
     </tr>
 </table>
@@ -194,20 +194,9 @@ $html = '
         <th style="width:50%; text-align:center;">Horário</th>
     </tr>
     ' . $horarios_table . '
-</table>';
+闭
 
-// Endereço de domicílio se aplicável
-if ($ficha['regime_domicilio'] && $ficha['localizacao']) {
-    $html .= '
-    <table style="width:100%; background-color:#f9f9f9; margin-bottom:10px;" cellpadding="6" cellspacing="0">
-        <tr>
-            <td><strong>Endereço para Atendimento:</strong><br>' . nl2br(htmlspecialchars($ficha['localizacao'])) . '</td>
-        </tr>
-    </table>';
-}
-
-// RESUMO FINANCEIRO
-$html .= '
+<!-- RESUMO FINANCEIRO -->
 <table style="width:100%; border-collapse:collapse; margin-bottom:10px;" cellpadding="5" cellspacing="0">
     <tr style="background-color:#003366;">
         <td style="color:white; font-weight:bold;">RESUMO FINANCEIRO</td>
@@ -215,14 +204,12 @@ $html .= '
     <tr>
         <td style="border-bottom:1px solid #ddd;">Valor do Pacote (' . $pacote_nome . '): ' . number_format($valor_base, 0, ',', '.') . ' MZN</td>
     </tr>';
-
 if ($ficha['regime_domicilio']) {
     $html .= '
     <tr>
         <td style="border-bottom:1px solid #ddd;">Taxa de Domicílio: + 1.000 MZN</td>
     </tr>';
 }
-
 $html .= '
     <tr style="background-color:#f0f0f0;">
         <td style="padding:8px; text-align:right;"><strong style="font-size:14px; color:#003366;">TOTAL PAGO: ' . number_format($pagamento['valor'], 0, ',', '.') . ' MZN</strong></td>
@@ -245,7 +232,7 @@ $html .= '
     <tr>
         <td align="center" style="color:#999; font-size:7px;">
             Documento emitido eletronicamente - Válido em todo território nacional<br>
-            Código de Verificação: ' . $referencia . ' | Emitido: ' . date('d/m/Y H:i:s') . '<br>
+            Código de Verificação: ' . htmlspecialchars($referencia) . ' | Emitido: ' . date('d/m/Y H:i:s') . '<br>
             Active Learning Academy - Transformando conhecimento em sucesso!
         </td>
     </tr>
